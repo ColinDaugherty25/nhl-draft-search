@@ -42,6 +42,9 @@ jobs:
         run: python3 server.py --build
 
       - uses: actions/configure-pages@v5
+        with:
+          # Auto-enable Pages on the first run so no manual UI step is needed.
+          enablement: true
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3

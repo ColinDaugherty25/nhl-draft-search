@@ -1,10 +1,13 @@
 // NHL Draft Explorer — vanilla JS, no build step.
 
-// Requests are routed through the local proxy in server.py, which adds the
-// CORS headers the NHL API doesn't send.
+// Pass-through proxy prefix for the raw NHL API (used for /draft/picks/now to
+// populate the year selector). Draft-year fetches go through /enriched instead
+// so the response carries career stats inline.
 const API_BASE = "/api/v1";
+const ENRICHED_BASE = "/enriched";
 const DASH = "—";
 const ALL_TEAMS = "ALL";
+const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
 
 // Historical tricode -> current franchise tricode. Selecting a current team
 // also includes picks from its franchise's older incarnations (Hartford
@@ -66,42 +69,6 @@ const state = {
   picks: [],
 };
 
-// Career-stat caches survive year/team switches so re-viewing is instant.
-const playerIdCache = new Map(); // key -> Promise<string|null>
-const statsCache = new Map();    // playerId -> Promise<{position, totals}|null>
-const LOADING = "·";
-
-// Rows fetch their stats only after scrolling into view. Limits API calls
-// for big "All teams" views; small filtered views fetch everything at once.
-const statsObserver = new IntersectionObserver(
-  (entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      const row = entry.target;
-      statsObserver.unobserve(row);
-      if (row._pick) fetchAndFillStats(row, row._pick);
-    }
-  },
-  { rootMargin: "200px" },
-);
-
-// Tiny semaphore so we don't fire 30 fetches at once when a big list pops into view.
-let activeFetches = 0;
-const fetchWaiters = [];
-async function gated(fn) {
-  while (activeFetches >= 6) {
-    await new Promise((resolve) => fetchWaiters.push(resolve));
-  }
-  activeFetches++;
-  try {
-    return await fn();
-  } finally {
-    activeFetches--;
-    const next = fetchWaiters.shift();
-    if (next) next();
-  }
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
   populateTeamSelect();
   document.getElementById("team").addEventListener("change", (e) => {
@@ -146,7 +113,7 @@ async function loadYear(year) {
   setStatus(`Loading ${year} draft…`, "loading");
   document.querySelector("#picks tbody").replaceChildren();
   try {
-    const res = await fetch(`${API_BASE}/draft/picks/${year}/all`);
+    const res = await fetch(`${ENRICHED_BASE}/draft/picks/${year}/all`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     state.picks = data.picks || [];
@@ -182,9 +149,6 @@ function setStatus(text, kind) {
 }
 
 function render() {
-  // Reset the lazy-stats observer so it isn't holding refs to detached rows.
-  statsObserver.disconnect();
-
   const tbody = document.querySelector("#picks tbody");
   tbody.replaceChildren();
 
@@ -204,13 +168,9 @@ function render() {
 
   const rows = [...filtered].sort((a, b) => a.overallPick - b.overallPick);
   for (const pick of rows) {
-    const tr = rowFor(pick);
-    tbody.appendChild(tr);
-    statsObserver.observe(tr);
+    tbody.appendChild(rowFor(pick));
   }
 }
-
-const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
 
 function emptyRow() {
   const tr = document.createElement("tr");
@@ -227,7 +187,6 @@ function emptyRow() {
 
 function rowFor(pick) {
   const tr = document.createElement("tr");
-  tr._pick = pick;
   const firstName = pick.firstName?.default ?? "";
   const lastName = pick.lastName?.default ?? "";
   const name = `${firstName} ${lastName}`.trim() || DASH;
@@ -238,133 +197,28 @@ function rowFor(pick) {
   tr.appendChild(logoCell(pick));
   tr.appendChild(textCell(name));
   tr.appendChild(textCell(pick.positionCode || DASH));
-  for (const _key of STAT_KEYS) {
-    tr.appendChild(statCell(LOADING));
+  for (const value of statValues(pick)) {
+    tr.appendChild(statCell(value));
   }
   return tr;
 }
 
-async function fetchAndFillStats(row, pick) {
-  if (!row.isConnected) return;
-  const playerId = await findPlayerId(pick);
-  if (!row.isConnected) return;
-  const info = playerId ? await getStats(playerId) : null;
-  if (!row.isConnected) return;
-  fillStatsCells(row, pick, info);
-}
-
-function playerKey(pick) {
-  return [
-    pick.firstName?.default ?? "",
-    pick.lastName?.default ?? "",
-    pick.positionCode ?? "",
-    pick.countryCode ?? "",
-    pick.height ?? "",
-  ].join("|");
-}
-
-function findPlayerId(pick) {
-  const key = playerKey(pick);
-  if (playerIdCache.has(key)) return playerIdCache.get(key);
-
-  const promise = gated(async () => {
-    const first = pick.firstName?.default;
-    const last = pick.lastName?.default;
-    if (!first || !last) return null;
-    const q = encodeURIComponent(`${first} ${last}`);
-    try {
-      const res = await fetch(
-        `/search/api/v1/search/player?culture=en-us&limit=20&q=${q}`,
-      );
-      if (!res.ok) return null;
-      const candidates = await res.json();
-      return chooseCandidate(candidates, pick);
-    } catch {
-      return null;
-    }
-  });
-  playerIdCache.set(key, promise);
-  return promise;
-}
-
-// Draft picks use LW/RW; the search endpoint uses L/R for those positions.
-const POS_FALLBACK = { LW: "L", RW: "R" };
-
-function chooseCandidate(list, pick) {
-  if (!Array.isArray(list) || list.length === 0) return null;
-
-  const first = (pick.firstName?.default ?? "").toLowerCase();
-  const last = (pick.lastName?.default ?? "").toLowerCase();
-  const fullName = `${first} ${last}`.trim();
-
-  // Pass 0: exact full-name match. Critical because q=First+Last token-matches
-  // also return other players sharing a surname (e.g. "Jakob Forsbacka Karlsson"
-  // also returns "William Karlsson" who'd otherwise win on position/country/height).
-  let pool = list.filter((c) => (c.name ?? "").toLowerCase() === fullName);
-  if (pool.length === 0) pool = list;
-
-  // Pass 1: positionCode match (with LW->L / RW->R fallback).
-  if (pick.positionCode && pool.length > 1) {
-    const match = pool.filter((c) => c.positionCode === pick.positionCode);
-    const fallback =
-      match.length === 0 && POS_FALLBACK[pick.positionCode]
-        ? pool.filter(
-            (c) => c.positionCode === POS_FALLBACK[pick.positionCode],
-          )
-        : [];
-    if (match.length) pool = match;
-    else if (fallback.length) pool = fallback;
+function statValues(pick) {
+  const cs = pick.careerStats;
+  if (!cs || cs.gamesPlayed == null) {
+    return STAT_KEYS.map(() => DASH);
   }
-  if (pool.length > 1 && pick.countryCode) {
-    const narrowed = pool.filter((c) => c.birthCountry === pick.countryCode);
-    if (narrowed.length) pool = narrowed;
-  }
-  if (pool.length > 1 && pick.height) {
-    const narrowed = pool.filter((c) => c.heightInInches === pick.height);
-    if (narrowed.length) pool = narrowed;
-  }
-  return pool[0]?.playerId ?? null;
-}
-
-function getStats(playerId) {
-  if (statsCache.has(playerId)) return statsCache.get(playerId);
-  const promise = gated(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/player/${playerId}/landing`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return {
-        position: data.position,
-        totals: data.careerTotals?.regularSeason ?? null,
-      };
-    } catch {
-      return null;
-    }
-  });
-  statsCache.set(playerId, promise);
-  return promise;
-}
-
-function fillStatsCells(row, pick, info) {
-  const cells = row.querySelectorAll(".stats-cell");
-  if (cells.length !== STAT_KEYS.length) return;
-  const totals = info?.totals;
-  const isGoalie = pick.positionCode === "G" || info?.position === "G";
-
-  const values = totals
-    ? [
-        totals.gamesPlayed,
-        isGoalie ? null : totals.goals,
-        isGoalie ? null : totals.assists,
-        isGoalie ? null : totals.points,
-        isGoalie ? null : totals.plusMinus,
-        totals.pim,
-      ]
-    : [null, null, null, null, null, null];
-
-  values.forEach((v, i) => {
-    cells[i].textContent = v == null ? DASH : String(v);
-  });
+  const isGoalie = pick.positionCode === "G" || cs.position === "G";
+  const skater = (v) => (isGoalie ? null : v);
+  const raw = [
+    cs.gamesPlayed,
+    skater(cs.goals),
+    skater(cs.assists),
+    skater(cs.points),
+    skater(cs.plusMinus),
+    cs.pim,
+  ];
+  return raw.map((v) => (v == null ? DASH : String(v)));
 }
 
 function statCell(value) {

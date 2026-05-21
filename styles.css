@@ -90,7 +90,6 @@ body {
 }
 
 .picks {
-  width: 100%;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
@@ -117,19 +116,15 @@ body {
   background: var(--row-alt);
 }
 
-.picks th:first-child,
 .picks td:first-child {
-  width: 4em;
   font-weight: 600;
 }
 
-.picks th:nth-child(2),
-.picks td:nth-child(2),
-.picks th:nth-child(3),
-.picks td:nth-child(3),
-.picks th:last-child,
-.picks td:last-child {
-  width: 4em;
+/* Player column: hold a comfortable width without flexing to the edge. */
+.picks th:nth-child(5),
+.picks td:nth-child(5) {
+  min-width: 14em;
+  padding-right: 24px;
 }
 
 .logo-cell {

@@ -41,6 +41,7 @@ CACHE_TTL_SECONDS = 24 * 60 * 60
 CACHE_VERSION = 3
 
 ENRICHMENT_WORKERS = 12
+PREWARM_COUNT = 5  # warm the latest N draft years in a background thread on startup
 
 # Draft uses LW/RW, search uses L/R.
 POS_FALLBACK = {"LW": "L", "RW": "R"}
@@ -210,25 +211,77 @@ def _build_enriched(year):
     return raw
 
 
+# Per-year locks so a user clicking a year currently being built (by the
+# pre-warmer or another in-flight request) waits and then serves from the
+# shared cache rather than firing a duplicate rebuild.
+_year_locks_meta = threading.Lock()
+_year_locks = {}
+
+
+def _year_lock(year):
+    with _year_locks_meta:
+        if year not in _year_locks:
+            _year_locks[year] = threading.Lock()
+        return _year_locks[year]
+
+
+def _cache_path(year):
+    return os.path.join(CACHE_DIR, f"enriched-v{CACHE_VERSION}-{year}.json")
+
+
+def _cache_fresh(path):
+    try:
+        return time.time() - os.path.getmtime(path) < CACHE_TTL_SECONDS
+    except FileNotFoundError:
+        return False
+
+
 def _enriched_response(year):
     """Return (status, body_bytes) for /enriched/draft/picks/{year}/all."""
     os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_path = os.path.join(CACHE_DIR, f"enriched-v{CACHE_VERSION}-{year}.json")
+    cache_path = _cache_path(year)
 
-    if os.path.exists(cache_path):
-        age = time.time() - os.path.getmtime(cache_path)
-        if age < CACHE_TTL_SECONDS:
+    if _cache_fresh(cache_path):
+        with open(cache_path, "rb") as f:
+            return 200, f.read()
+
+    with _year_lock(year):
+        # Re-check inside the lock — another thread may have just built it.
+        if _cache_fresh(cache_path):
             with open(cache_path, "rb") as f:
                 return 200, f.read()
 
-    enriched = _build_enriched(year)
-    if enriched is None:
-        return 502, b'{"error":"upstream draft fetch failed"}'
+        enriched = _build_enriched(year)
+        if enriched is None:
+            return 502, b'{"error":"upstream draft fetch failed"}'
 
-    body = json.dumps(enriched).encode()
-    with open(cache_path, "wb") as f:
-        f.write(body)
-    return 200, body
+        body = json.dumps(enriched).encode()
+        with open(cache_path, "wb") as f:
+            f.write(body)
+        return 200, body
+
+
+def _prewarm_caches():
+    """Background-build enriched caches for the latest PREWARM_COUNT draft
+    years so a typical user click on a recent year is served from disk."""
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    now = _upstream_json(f"{NHL_API}/v1/draft/picks/now")
+    latest = (now or {}).get("draftYear")
+    if not latest:
+        print("pre-warm: could not determine current draft year, skipping", flush=True)
+        return
+    years = [latest - i for i in range(PREWARM_COUNT)]
+    print(f"pre-warm: warming {years}", flush=True)
+    for y in years:
+        if _cache_fresh(_cache_path(y)):
+            print(f"pre-warm: {y} already fresh, skipping", flush=True)
+            continue
+        t0 = time.time()
+        try:
+            _enriched_response(y)
+            print(f"pre-warm: {y} ready in {time.time() - t0:.1f}s", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"pre-warm: {y} failed ({exc})", flush=True)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -279,6 +332,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
+    threading.Thread(target=_prewarm_caches, daemon=True).start()
     with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
         httpd.allow_reuse_address = True
         print(f"NHL Draft Explorer serving at http://localhost:{PORT}/")

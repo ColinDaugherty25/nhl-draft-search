@@ -43,19 +43,39 @@ const TEAMS = [
 ];
 
 const state = {
-  year: 2023,
+  year: null,
   teamTricode: ALL_TEAMS,
   picks: [],
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   populateTeamSelect();
   document.getElementById("team").addEventListener("change", (e) => {
     state.teamTricode = e.target.value;
     render();
   });
-  loadYear(state.year);
+  document.getElementById("year").addEventListener("change", (e) => {
+    state.year = Number(e.target.value);
+    loadYear(state.year);
+  });
+  await populateYearSelect();
+  await loadYear(state.year);
 });
+
+async function populateYearSelect() {
+  // /draft/picks/now 307-redirects to the current draft and includes
+  // draftYears (years with API data) and draftYear (the year currently
+  // populated). Default to draftYear so we don't open on an empty future draft.
+  const res = await fetch(`${API_BASE}/draft/picks/now`);
+  const data = await res.json();
+  const years = [...(data.draftYears || [])].sort((a, b) => b - a);
+  const select = document.getElementById("year");
+  for (const year of years) {
+    select.appendChild(new Option(String(year), String(year)));
+  }
+  state.year = data.draftYear ?? years[0];
+  select.value = String(state.year);
+}
 
 function populateTeamSelect() {
   const select = document.getElementById("team");

@@ -13,10 +13,14 @@ const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pi
 // when the user has already moved on to a different year.
 let loadToken = 0;
 
-// Historical tricode -> current franchise tricode. Used only to keep the
-// team selection across year changes (Carolina selected, switch to 1985 ->
-// auto-switch to "Hartford Whalers"). The dropdown itself is derived from
-// each year's picks, so old and new teams appear era-accurately.
+// Historical tricode -> current franchise tricode. Two consumers:
+//   1. pickBestTeam — when the year changes and the selected team didn't
+//      exist that year, follow LINEAGE forward (HFD -> CAR) or backward
+//      (CAR -> HFD) to keep the same franchise selected.
+//   2. teamPageUrl — clicking a defunct franchise's logo (Whalers, Nordiques,
+//      etc.) routes to the current franchise's NHL.com page.
+// The dropdown itself is derived from each year's picks, so old and new
+// teams appear era-accurately regardless of LINEAGE.
 const LINEAGE = {
   HFD: "CAR", // Hartford Whalers     -> Carolina Hurricanes  (1997)
   QUE: "COL", // Quebec Nordiques     -> Colorado Avalanche   (1995)

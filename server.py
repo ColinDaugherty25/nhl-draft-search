@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Static file server + NHL API proxy + draft-pick stats enrichment.
+"""Local dev server + data enrichment CLI for the NHL Draft Explorer.
 
-The NHL endpoints do not send CORS headers, so the browser blocks direct
-fetches. This script serves the static site AND proxies three prefixes:
-    /api/      -> https://api-web.nhle.com       (draft picks, player landing)
-    /search/   -> https://search.d3.nhle.com     (player search)
-    /enriched/ -> built locally; joins draft picks with each player's
-                  career totals (one fat response instead of ~450 small ones).
+The site that ships to GitHub Pages is pure static — HTML/CSS/JS plus
+pre-built JSON in data/. This script has two roles:
 
-Run from the project root:
+HTTP mode (no args):
     python3 server.py
-Then open: http://localhost:8000
+    Serves the project root over http://localhost:8000. Requests for
+    data/enriched-v{N}-{year}.json that aren't yet on disk are intercepted
+    and built on demand by hitting the NHL public API; the result is
+    written to data/ so subsequent clicks are instant. A background
+    pre-warm thread builds the latest PREWARM_COUNT years on startup.
+
+Build mode (used by GitHub Actions):
+    python3 server.py --build [year ...]
+    Enriches the listed years (or the latest PREWARM_COUNT if none given),
+    writes data/enriched-v{N}-{year}.json + data/years.json, and exits.
 """
 
 import http.client
@@ -22,16 +27,11 @@ import socketserver
 import sys
 import threading
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 PORT = 8000
-ROUTES = (
-    ("/api/",    "https://api-web.nhle.com"),
-    ("/search/", "https://search.d3.nhle.com"),
-)
 
 NHL_API = "https://api-web.nhle.com"
 NHL_SEARCH = "https://search.d3.nhle.com"
@@ -355,20 +355,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             self._respond(status, "application/json", body)
             return
-        for prefix, base in ROUTES:
-            if self.path.startswith(prefix):
-                self._proxy(base + self.path[len(prefix) - 1:])  # keep leading /
-                return
         super().do_GET()
-
-    def _proxy(self, url):
-        try:
-            status, ctype, body = _upstream_get(url)
-            self._respond(status, ctype, body)
-        except urllib.error.HTTPError as exc:
-            self._error(exc.code, f"Upstream HTTP {exc.code}: {exc.reason}")
-        except Exception as exc:  # noqa: BLE001
-            self._error(502, f"Upstream error: {exc}")
 
     def _respond(self, status, content_type, body):
         self.send_response(status)

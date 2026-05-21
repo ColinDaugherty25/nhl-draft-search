@@ -33,6 +33,14 @@ body {
   font-size: 1.6rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.nhl-crest {
+  height: 1.6em;
+  width: auto;
 }
 
 .team-logo {
@@ -117,7 +125,8 @@ body {
 .picks thead th.stats-group {
   text-align: center;
   border-left: 1px solid var(--border);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 
 .picks thead th[data-key] {
@@ -129,19 +138,22 @@ body {
   color: CanvasText;
 }
 
-.picks thead th.sort-asc::after {
-  content: " ▲";
-  font-size: 0.7em;
-}
-
+.picks thead th.sort-asc::after,
 .picks thead th.sort-desc::after {
-  content: " ▼";
-  font-size: 0.7em;
+  font-size: 0.65em;
+  margin-left: 0.35em;
+  color: CanvasText;
 }
+.picks thead th.sort-asc::after  { content: "▲"; }
+.picks thead th.sort-desc::after { content: "▼"; }
 
 .picks tbody td {
-  padding: 10px 8px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--border);
+}
+
+.picks tbody tr:not(.round-divider):hover {
+  background: color-mix(in srgb, currentColor 9%, transparent);
 }
 
 .picks tbody a {
@@ -161,11 +173,23 @@ body {
   font-weight: 600;
 }
 
-/* Player column: hold a comfortable width without flexing to the edge. */
+/* Right-align the three pick-number columns (Overall / Round / Pick). They're
+ * numeric and read more cleanly aligned with the stats block to the right. */
+.picks th:nth-child(-n+3),
+.picks td:nth-child(-n+3) {
+  text-align: right;
+  width: 4em;
+}
+
+/* Player column: hold a comfortable width without flexing to the edge.
+ * Slightly heavier weight so names stand out from the numeric columns. */
 .picks th:nth-child(5),
 .picks td:nth-child(5) {
   min-width: 14em;
   padding-right: 24px;
+}
+.picks td:nth-child(5) {
+  font-weight: 500;
 }
 
 .logo-cell {
@@ -185,17 +209,6 @@ body {
 .picks tbody td:nth-child(7),
 .picks thead th.stats-sub:first-of-type {
   border-left: 1px solid var(--border);
-}
-
-/* Tighten the gap between PTS (col 10) and +/- (col 11) — these naturally
- * read as a pair, but with full stats-cell padding they sit too far apart. */
-.picks tbody td:nth-child(10),
-.picks thead th.stats-sub:nth-of-type(4) {
-  padding-right: 2px !important;
-}
-.picks tbody td:nth-child(11),
-.picks thead th.stats-sub:nth-of-type(5) {
-  padding-left: 2px !important;
 }
 
 .row-logo {

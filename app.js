@@ -52,6 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   populateTeamSelect();
   document.getElementById("team").addEventListener("change", (e) => {
     state.teamTricode = e.target.value;
+    updateTeamLogo();
     render();
   });
   document.getElementById("year").addEventListener("change", (e) => {
@@ -101,6 +102,23 @@ async function loadYear(year) {
     state.picks = [];
     setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
   }
+}
+
+function updateTeamLogo() {
+  const img = document.getElementById("team-logo");
+  if (state.teamTricode === ALL_TEAMS) {
+    img.hidden = true;
+    img.removeAttribute("src");
+    img.alt = "";
+    return;
+  }
+  const team = TEAMS.find((t) => t.tricode === state.teamTricode);
+  img.src = `https://assets.nhle.com/logos/nhl/svg/${state.teamTricode}_light.svg`;
+  img.alt = team ? `${team.name} logo` : `${state.teamTricode} logo`;
+  img.hidden = false;
+  img.onerror = () => {
+    img.hidden = true;
+  };
 }
 
 function setStatus(text, kind) {

@@ -1,65 +1,88 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
   color-scheme: light dark;
+  --border: color-mix(in srgb, currentColor 18%, transparent);
+  --row-alt: color-mix(in srgb, currentColor 5%, transparent);
+  --muted: color-mix(in srgb, currentColor 55%, transparent);
 }
 
 body {
   margin: 0;
   background: Canvas;
   color: CanvasText;
+  line-height: 1.4;
 }
 
 .container {
-  max-width: 960px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 24px 20px 48px;
 }
 
 .app-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 20px;
+  min-height: 56px;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .team-logo {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
 }
 
 .controls {
   display: flex;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
+  align-items: flex-end;
 }
 
 .controls label {
   display: flex;
   flex-direction: column;
-  font-size: 0.85rem;
-  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  gap: 6px;
 }
 
 .controls select {
+  font: inherit;
   font-size: 1rem;
-  padding: 6px 8px;
-  min-width: 200px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: CanvasText;
+  padding: 8px 10px;
+  min-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: Canvas;
 }
 
 .status {
   min-height: 1.4em;
-  margin-bottom: 8px;
-  font-size: 0.95rem;
+  margin: 8px 0 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
-.status.loading {
-  color: #555;
+.status.loading::before {
+  content: "⏳ ";
 }
 
 .status.error {
@@ -69,6 +92,7 @@ body {
 .picks {
   width: 100%;
   border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
 }
 
 .picks thead th {
@@ -76,21 +100,41 @@ body {
   top: 0;
   background: Canvas;
   text-align: left;
-  border-bottom: 2px solid currentColor;
-  padding: 8px;
+  border-bottom: 2px solid var(--border);
+  padding: 10px 8px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 .picks tbody td {
-  padding: 8px;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .picks tbody tr:nth-child(even) {
-  background: color-mix(in srgb, currentColor 4%, transparent);
+  background: var(--row-alt);
+}
+
+.picks th:first-child,
+.picks td:first-child {
+  width: 4em;
+  font-weight: 600;
+}
+
+.picks th:nth-child(2),
+.picks td:nth-child(2),
+.picks th:nth-child(3),
+.picks td:nth-child(3),
+.picks th:last-child,
+.picks td:last-child {
+  width: 4em;
 }
 
 .empty {
   text-align: center;
-  color: #777;
+  color: var(--muted);
   font-style: italic;
+  padding: 24px !important;
 }

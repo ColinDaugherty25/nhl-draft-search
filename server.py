@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Static file server + NHL API proxy.
 
-The NHL API (api-web.nhle.com) does not send CORS headers, so the browser
-blocks direct fetches. This script serves the static site AND proxies any
-request under /api/ to api-web.nhle.com, adding an Access-Control-Allow-Origin
-header so the browser is happy.
+The NHL endpoints do not send CORS headers, so the browser blocks direct
+fetches. This script serves the static site AND proxies two prefixes:
+    /api/    -> https://api-web.nhle.com       (draft picks, player landing)
+    /search/ -> https://search.d3.nhle.com     (player search)
+adding an Access-Control-Allow-Origin header so the browser is happy.
 
 Run from the project root:
     python3 server.py
@@ -18,20 +19,21 @@ import urllib.error
 import urllib.request
 
 PORT = 8000
-PROXY_PREFIX = "/api/"
-NHL_API_BASE = "https://api-web.nhle.com"
+ROUTES = (
+    ("/api/",    "https://api-web.nhle.com"),
+    ("/search/", "https://search.d3.nhle.com"),
+)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith(PROXY_PREFIX):
-            self._proxy()
-        else:
-            super().do_GET()
+        for prefix, base in ROUTES:
+            if self.path.startswith(prefix):
+                self._proxy(base + self.path[len(prefix) - 1:])  # keep leading /
+                return
+        super().do_GET()
 
-    def _proxy(self):
-        upstream_path = self.path[len(PROXY_PREFIX) - 1:]  # keep leading slash
-        url = NHL_API_BASE + upstream_path
+    def _proxy(self, url):
         try:
             req = urllib.request.Request(
                 url, headers={"User-Agent": "nhl-draft-explorer/1.0"}

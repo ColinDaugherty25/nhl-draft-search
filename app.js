@@ -1,6 +1,8 @@
 // NHL Draft Explorer — vanilla JS, no build step.
 
-const API_BASE = "https://api-web.nhle.com/v1";
+// Requests are routed through the local proxy in server.py, which adds the
+// CORS headers the NHL API doesn't send.
+const API_BASE = "/api/v1";
 const DASH = "—";
 const ALL_TEAMS = "ALL";
 

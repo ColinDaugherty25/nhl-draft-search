@@ -1,21 +1,20 @@
 # NHL Draft Explorer
 
-A static web app for browsing NHL Entry Draft picks by team and year. No build step, no dependencies.
+A static web app for browsing NHL Entry Draft picks by team and year. No build step, no dependencies (Python 3 is used only to serve the files and proxy the API).
 
 ## Run it
 
-The app calls the public NHL API directly from the browser. Some browsers block `fetch` from `file://` URLs, so the simplest reliable way is to serve over `http://localhost`:
-
 ```sh
-python3 -m http.server 8000
+python3 server.py
 ```
 
 Then open <http://localhost:8000>.
 
-Alternatively, open `index.html` directly — it usually works, but if requests fail use the local server above.
+`server.py` does two things: serves the static files (`index.html`, `styles.css`, `app.js`) and proxies any request under `/api/` to `https://api-web.nhle.com`. The proxy is needed because the NHL API does not send CORS headers, so the browser would otherwise block direct calls to it.
 
 ## Files
 
 - `index.html` — markup and layout
 - `styles.css` — styling
-- `app.js` — fetch, state, rendering
+- `app.js` — fetch, state, rendering (talks to `/api/v1/...` via the local proxy)
+- `server.py` — static server + NHL API proxy

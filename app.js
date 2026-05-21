@@ -2,15 +2,70 @@
 
 const API_BASE = "https://api-web.nhle.com/v1";
 const DASH = "—";
+const ALL_TEAMS = "ALL";
+
+// Current 32 NHL franchises. Picks from defunct teams (e.g. HFD, QUE) still
+// appear in older draft data — they render under "All teams" but aren't in
+// this dropdown.
+const TEAMS = [
+  { tricode: "ANA", name: "Anaheim Ducks" },
+  { tricode: "BOS", name: "Boston Bruins" },
+  { tricode: "BUF", name: "Buffalo Sabres" },
+  { tricode: "CGY", name: "Calgary Flames" },
+  { tricode: "CAR", name: "Carolina Hurricanes" },
+  { tricode: "CHI", name: "Chicago Blackhawks" },
+  { tricode: "COL", name: "Colorado Avalanche" },
+  { tricode: "CBJ", name: "Columbus Blue Jackets" },
+  { tricode: "DAL", name: "Dallas Stars" },
+  { tricode: "DET", name: "Detroit Red Wings" },
+  { tricode: "EDM", name: "Edmonton Oilers" },
+  { tricode: "FLA", name: "Florida Panthers" },
+  { tricode: "LAK", name: "Los Angeles Kings" },
+  { tricode: "MIN", name: "Minnesota Wild" },
+  { tricode: "MTL", name: "Montréal Canadiens" },
+  { tricode: "NSH", name: "Nashville Predators" },
+  { tricode: "NJD", name: "New Jersey Devils" },
+  { tricode: "NYI", name: "New York Islanders" },
+  { tricode: "NYR", name: "New York Rangers" },
+  { tricode: "OTT", name: "Ottawa Senators" },
+  { tricode: "PHI", name: "Philadelphia Flyers" },
+  { tricode: "PIT", name: "Pittsburgh Penguins" },
+  { tricode: "SJS", name: "San Jose Sharks" },
+  { tricode: "SEA", name: "Seattle Kraken" },
+  { tricode: "STL", name: "St. Louis Blues" },
+  { tricode: "TBL", name: "Tampa Bay Lightning" },
+  { tricode: "TOR", name: "Toronto Maple Leafs" },
+  { tricode: "UTA", name: "Utah Hockey Club" },
+  { tricode: "VAN", name: "Vancouver Canucks" },
+  { tricode: "VGK", name: "Vegas Golden Knights" },
+  { tricode: "WSH", name: "Washington Capitals" },
+  { tricode: "WPG", name: "Winnipeg Jets" },
+];
 
 const state = {
   year: 2023,
+  teamTricode: ALL_TEAMS,
   picks: [],
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  populateTeamSelect();
+  document.getElementById("team").addEventListener("change", (e) => {
+    state.teamTricode = e.target.value;
+    render();
+  });
   loadYear(state.year);
 });
+
+function populateTeamSelect() {
+  const select = document.getElementById("team");
+  const all = new Option("All teams", ALL_TEAMS);
+  select.appendChild(all);
+  for (const team of TEAMS) {
+    select.appendChild(new Option(team.name, team.tricode));
+  }
+  select.value = state.teamTricode;
+}
 
 async function loadYear(year) {
   const res = await fetch(`${API_BASE}/draft/picks/${year}/all`);
@@ -23,7 +78,12 @@ function render() {
   const tbody = document.querySelector("#picks tbody");
   tbody.replaceChildren();
 
-  const rows = [...state.picks].sort((a, b) => a.overallPick - b.overallPick);
+  const filtered =
+    state.teamTricode === ALL_TEAMS
+      ? state.picks
+      : state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
+
+  const rows = [...filtered].sort((a, b) => a.overallPick - b.overallPick);
   for (const pick of rows) {
     tbody.appendChild(rowFor(pick));
   }

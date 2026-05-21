@@ -24,6 +24,26 @@ const LINEAGE = {
   ARI: "UTA", // Arizona Coyotes      -> Utah Hockey Club     (2024)
   ATL: "WPG", // Atlanta Thrashers    -> Winnipeg Jets        (2011)
 };
+// Reverse: current franchise tricode -> [predecessors]
+const REVERSE_LINEAGE = Object.entries(LINEAGE).reduce((acc, [oldTri, curTri]) => {
+  (acc[curTri] ??= []).push(oldTri);
+  return acc;
+}, {});
+
+// Given the previous selection and the set of tricodes available in the new
+// year, follow LINEAGE forward (e.g. HFD -> CAR) or backward (CAR -> HFD) to
+// keep the same franchise selected across year changes. Falls back to "All
+// teams" when no era of the lineage drafted that year.
+function pickBestTeam(current, availableTricodes) {
+  if (current === ALL_TEAMS) return ALL_TEAMS;
+  if (availableTricodes.has(current)) return current;
+  const forward = LINEAGE[current];
+  if (forward && availableTricodes.has(forward)) return forward;
+  for (const predecessor of REVERSE_LINEAGE[current] ?? []) {
+    if (availableTricodes.has(predecessor)) return predecessor;
+  }
+  return ALL_TEAMS;
+}
 
 const state = {
   year: null,
@@ -86,9 +106,7 @@ function populateTeamSelect() {
     select.appendChild(new Option(team.name, team.tricode));
   }
   state.teamsByTricode = seen;
-  if (!seen.has(state.teamTricode) && state.teamTricode !== ALL_TEAMS) {
-    state.teamTricode = ALL_TEAMS;
-  }
+  state.teamTricode = pickBestTeam(state.teamTricode, new Set(seen.keys()));
   select.value = state.teamTricode;
 }
 
@@ -142,11 +160,7 @@ function render() {
   const filtered =
     state.teamTricode === ALL_TEAMS
       ? state.picks
-      : state.picks.filter(
-          (p) =>
-            p.teamAbbrev === state.teamTricode ||
-            LINEAGE[p.teamAbbrev] === state.teamTricode,
-        );
+      : state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
 
   if (filtered.length === 0) {
     tbody.appendChild(emptyRow());

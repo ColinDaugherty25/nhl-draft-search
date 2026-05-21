@@ -235,7 +235,7 @@ function rowFor(pick) {
   tr.appendChild(textCell(pick.overallPick ?? DASH));
   tr.appendChild(textCell(pick.round ?? DASH));
   tr.appendChild(textCell(pick.pickInRound ?? DASH));
-  tr.appendChild(logoCell(pick.teamAbbrev));
+  tr.appendChild(logoCell(pick));
   tr.appendChild(textCell(name));
   tr.appendChild(textCell(pick.positionCode || DASH));
   for (const _key of STAT_KEYS) {
@@ -380,17 +380,29 @@ function textCell(value) {
   return td;
 }
 
-function logoCell(tricode) {
+function logoCell(pick) {
   const td = document.createElement("td");
   td.className = "logo-cell";
-  if (!tricode) return td;
+  const src = logoUrlForRow(pick);
+  if (!src) return td;
   const img = document.createElement("img");
   img.className = "row-logo";
   img.alt = "";
-  img.src = `https://assets.nhle.com/logos/nhl/svg/${tricode}_light.svg`;
+  img.src = src;
   img.onerror = () => {
     img.style.visibility = "hidden";
   };
   td.appendChild(img);
   return td;
+}
+
+function logoUrlForRow(pick) {
+  // Specific-team view: every row (including historicals merged via LINEAGE)
+  // uses the current franchise logo so the page reads as one team's history.
+  if (state.teamTricode !== ALL_TEAMS) {
+    return `https://assets.nhle.com/logos/nhl/svg/${state.teamTricode}_light.svg`;
+  }
+  // All-teams view: era-accurate logo straight from the pick payload. The API
+  // ships per-pick teamLogoLight URLs that work for defunct tricodes too.
+  return pick.teamLogoLight ?? null;
 }

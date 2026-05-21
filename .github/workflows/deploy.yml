@@ -19,7 +19,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Python unit tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: JS unit tests
+        run: node --test 'tests/unit/*.mjs'
+
+      - name: Install Playwright + Chromium
+        # No committed package.json — install Playwright into node_modules
+        # (gitignored) for this job. Then download just chromium.
+        run: |
+          npm install --no-save --no-package-lock --silent playwright
+          npx playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: |
+          python3 server.py > /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:8000/data/years.json > /dev/null && exit 0
+            sleep 0.5
+          done
+          echo "server did not come up"; cat /tmp/server.log; exit 1
+
+      - name: Playwright E2E tests
+        # In CI we don't have the system Chrome, so override _helpers.mjs to
+        # use the playwright-bundled chromium installed in the step above.
+        env:
+          PLAYWRIGHT_CI: "1"
+        run: node --test 'tests/e2e/test_*.mjs'
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

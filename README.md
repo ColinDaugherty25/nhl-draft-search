@@ -34,6 +34,14 @@ python3 server.py --build 2025 2024 2023
 
 Without arguments it refreshes the latest 5 years (`PREWARM_COUNT`). This is the exact command GitHub Actions runs.
 
+## Tests
+
+```sh
+bash tests/run.sh
+```
+
+Runs three layers: Python `unittest` for `server.py` pure logic, Node `node:test` for `js/pure.mjs`, and Playwright end-to-end tests against the dev server. The same suite gates the GitHub Pages deploy. See [tests/README.md](tests/README.md) for details and the convention for adding tests as new features land.
+
 ## Deployment & data refresh
 
 `.github/workflows/deploy.yml` builds and publishes the site to GitHub Pages on three triggers:
@@ -47,6 +55,8 @@ Without arguments it refreshes the latest 5 years (`PREWARM_COUNT`). This is the
 ## Project layout
 
 - `index.html` / `styles.css` / `app.js` — the static frontend
+- `js/pure.mjs` — pure logic (LINEAGE, sort comparators, etc.) shared by `app.js` and the JS unit tests
 - `server.py` — local dev server + `--build` CLI for data enrichment
 - `data/` — pre-built JSON consumed by the frontend (one file per year + `years.json`)
-- `.github/workflows/deploy.yml` — daily refresh + GitHub Pages deploy
+- `tests/` — Python + JS unit + Playwright E2E test suite
+- `.github/workflows/deploy.yml` — test gate, daily refresh, GitHub Pages deploy

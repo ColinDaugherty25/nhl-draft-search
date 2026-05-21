@@ -2,4 +2,6 @@
 *.swp
 .idea/
 .vscode/
+.claude/
 node_modules/
+__pycache__/

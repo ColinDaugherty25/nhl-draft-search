@@ -13,11 +13,13 @@ Run from the project root:
 Then open: http://localhost:8000
 """
 
+import http.client
 import http.server
 import json
 import os
 import socketserver
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -45,7 +47,11 @@ POS_FALLBACK = {"LW": "L", "RW": "R"}
 
 
 def _upstream_get(url):
-    """GET an upstream URL and return (status, content_type, body)."""
+    """GET an upstream URL and return (status, content_type, body).
+
+    Uses urllib so HTTP redirects (e.g. /draft/picks/now 307s) are followed
+    automatically. Used by the small number of proxy calls per page load; the
+    high-volume enrichment loop uses _upstream_json_fast instead."""
     req = urllib.request.Request(url, headers={"User-Agent": "nhl-draft-explorer/1.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         return resp.status, resp.headers.get("Content-Type", "application/json"), resp.read()
@@ -58,6 +64,54 @@ def _upstream_json(url):
         return json.loads(body)
     except Exception:  # noqa: BLE001
         return None
+
+
+# Per-thread keep-alive HTTPS connections, keyed by host. Each enrichment
+# worker makes ~75 calls in a tight loop; reusing one TCP+TLS handshake per
+# (thread, host) shaves ~50-100ms off every call after the first.
+_tls = threading.local()
+
+
+def _get_conn(host):
+    conns = getattr(_tls, "conns", None)
+    if conns is None:
+        conns = {}
+        _tls.conns = conns
+    if host not in conns:
+        conns[host] = http.client.HTTPSConnection(host, timeout=15)
+    return conns[host]
+
+
+def _drop_conn(host):
+    conns = getattr(_tls, "conns", None) or {}
+    c = conns.pop(host, None)
+    if c is not None:
+        try:
+            c.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _upstream_json_fast(url):
+    """Like _upstream_json but uses a per-thread keep-alive connection. Does
+    NOT follow redirects — only used for enrichment endpoints that return 200
+    directly (search and /player/{id}/landing)."""
+    parsed = urllib.parse.urlsplit(url)
+    path = parsed.path + (("?" + parsed.query) if parsed.query else "")
+    # One retry if the connection went stale between calls.
+    for attempt in range(2):
+        try:
+            conn = _get_conn(parsed.netloc)
+            conn.request("GET", path, headers={"User-Agent": "nhl-draft-explorer/1.0"})
+            resp = conn.getresponse()
+            body = resp.read()
+            if resp.status != 200:
+                return None
+            return json.loads(body)
+        except (http.client.HTTPException, ConnectionError, OSError, json.JSONDecodeError):
+            _drop_conn(parsed.netloc)
+            if attempt == 1:
+                return None
 
 
 def _choose_candidate(candidates, pick):
@@ -116,13 +170,13 @@ def _enrich_one(pick):
     if not first or not last:
         return None
     q = urllib.parse.quote_plus(f"{first} {last}")
-    candidates = _upstream_json(
+    candidates = _upstream_json_fast(
         f"{NHL_SEARCH}/api/v1/search/player?culture=en-us&limit=20&q={q}"
     )
     player_id = _choose_candidate(candidates, pick)
     if not player_id:
         return None
-    landing = _upstream_json(f"{NHL_API}/v1/player/{player_id}/landing")
+    landing = _upstream_json_fast(f"{NHL_API}/v1/player/{player_id}/landing")
     if not landing:
         return {"playerId": player_id, "stats": None}
     totals = (landing.get("careerTotals") or {}).get("regularSeason") or {}

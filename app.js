@@ -88,10 +88,25 @@ function populateTeamSelect() {
 }
 
 async function loadYear(year) {
-  const res = await fetch(`${API_BASE}/draft/picks/${year}/all`);
-  const data = await res.json();
-  state.picks = data.picks || [];
-  render();
+  setStatus(`Loading ${year} draft…`, "loading");
+  document.querySelector("#picks tbody").replaceChildren();
+  try {
+    const res = await fetch(`${API_BASE}/draft/picks/${year}/all`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    state.picks = data.picks || [];
+    setStatus("", null);
+    render();
+  } catch (err) {
+    state.picks = [];
+    setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
+  }
+}
+
+function setStatus(text, kind) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.className = "status" + (kind ? ` ${kind}` : "");
 }
 
 function render() {
@@ -103,10 +118,28 @@ function render() {
       ? state.picks
       : state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
 
+  if (filtered.length === 0) {
+    tbody.appendChild(emptyRow());
+    return;
+  }
+
   const rows = [...filtered].sort((a, b) => a.overallPick - b.overallPick);
   for (const pick of rows) {
     tbody.appendChild(rowFor(pick));
   }
+}
+
+function emptyRow() {
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.colSpan = 5;
+  td.className = "empty";
+  td.textContent =
+    state.teamTricode === ALL_TEAMS
+      ? "No picks for this year."
+      : "No picks for this team in this year.";
+  tr.appendChild(td);
+  return tr;
 }
 
 function rowFor(pick) {

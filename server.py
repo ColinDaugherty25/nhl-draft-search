@@ -35,6 +35,8 @@ NHL_SEARCH = "https://search.d3.nhle.com"
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 CACHE_TTL_SECONDS = 24 * 60 * 60
+# Bump when the enriched response shape changes so old cache files are ignored.
+CACHE_VERSION = 2
 
 ENRICHMENT_WORKERS = 12
 
@@ -102,7 +104,8 @@ def _choose_candidate(candidates, pick):
 
 
 def _enrich_one(pick):
-    """Resolve a pick -> careerStats dict (or None)."""
+    """Resolve a pick -> {playerId, stats} (or None). playerId enables a deep
+    link from the player's name in the table to nhl.com/player/{id}."""
     first = (pick.get("firstName") or {}).get("default")
     last = (pick.get("lastName") or {}).get("default")
     if not first or not last:
@@ -116,16 +119,19 @@ def _enrich_one(pick):
         return None
     landing = _upstream_json(f"{NHL_API}/v1/player/{player_id}/landing")
     if not landing:
-        return None
+        return {"playerId": player_id, "stats": None}
     totals = (landing.get("careerTotals") or {}).get("regularSeason") or {}
     return {
-        "position": landing.get("position"),
-        "gamesPlayed": totals.get("gamesPlayed"),
-        "goals": totals.get("goals"),
-        "assists": totals.get("assists"),
-        "points": totals.get("points"),
-        "plusMinus": totals.get("plusMinus"),
-        "pim": totals.get("pim"),
+        "playerId": player_id,
+        "stats": {
+            "position": landing.get("position"),
+            "gamesPlayed": totals.get("gamesPlayed"),
+            "goals": totals.get("goals"),
+            "assists": totals.get("assists"),
+            "points": totals.get("points"),
+            "plusMinus": totals.get("plusMinus"),
+            "pim": totals.get("pim"),
+        },
     }
 
 
@@ -137,8 +143,9 @@ def _build_enriched(year):
 
     with ThreadPoolExecutor(max_workers=ENRICHMENT_WORKERS) as pool:
         results = list(pool.map(_enrich_one, picks))
-    for pick, stats in zip(picks, results):
-        pick["careerStats"] = stats
+    for pick, result in zip(picks, results):
+        pick["playerId"] = result["playerId"] if result else None
+        pick["careerStats"] = result["stats"] if result else None
 
     raw["picks"] = picks
     return raw
@@ -147,7 +154,7 @@ def _build_enriched(year):
 def _enriched_response(year):
     """Return (status, body_bytes) for /enriched/draft/picks/{year}/all."""
     os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_path = os.path.join(CACHE_DIR, f"enriched-{year}.json")
+    cache_path = os.path.join(CACHE_DIR, f"enriched-v{CACHE_VERSION}-{year}.json")
 
     if os.path.exists(cache_path):
         age = time.time() - os.path.getmtime(cache_path)

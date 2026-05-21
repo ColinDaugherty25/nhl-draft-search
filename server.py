@@ -36,7 +36,7 @@ NHL_SEARCH = "https://search.d3.nhle.com"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 CACHE_TTL_SECONDS = 24 * 60 * 60
 # Bump when the enriched response shape changes so old cache files are ignored.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 ENRICHMENT_WORKERS = 12
 
@@ -71,9 +71,14 @@ def _choose_candidate(candidates, pick):
     last = (pick.get("lastName") or {}).get("default", "")
     full_name = f"{first} {last}".strip().lower()
 
+    # Strict exact-name match. The search API does fuzzy matching by first name
+    # alone, so without this guard a draft pick whose actual person isn't in
+    # the player index (e.g. unsigned 2025 prospects) silently matches an
+    # unrelated player with the same first name and country — the Medvedev
+    # bug: "Alexei Medvedev" matched Alexei Yashin because both are 6'3" RUS.
     pool = [c for c in candidates if (c.get("name") or "").lower() == full_name]
     if not pool:
-        pool = candidates
+        return None
 
     pos = pick.get("positionCode")
     if pos and len(pool) > 1:

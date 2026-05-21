@@ -1,22 +1,34 @@
 # NHL Draft Explorer
 
-A static web app for browsing NHL Entry Draft picks by team and year. No build step, no dependencies (Python 3 is used only to serve the files and proxy the API).
+A static web app for browsing NHL Entry Draft picks by team and year. Era-accurate team logos, career stats per pick, sortable columns, and deep links to each player's NHL.com profile.
 
-Repo: <https://github.com/ColinDaugherty25/nhl-draft-search>
+**Live site:** <https://colindaugherty25.github.io/nhl-draft-search/>
 
-## Run it
+**Repo:** <https://github.com/ColinDaugherty25/nhl-draft-search>
+
+## How it works
+
+The frontend is pure static files (`index.html`, `app.js`, `styles.css`) that consume pre-built JSON in `data/`. A GitHub Action enriches the data nightly by hitting the NHL public API for each draft pick's career stats and writes the result to `data/enriched-v3-{year}.json`. No runtime server, no CORS proxy, no backend.
+
+## Run it locally
 
 ```sh
 python3 server.py
 ```
 
-Then open <http://localhost:8000>.
+Then open <http://localhost:8000>. The local server serves the same static files plus on-demand enrichment for any year not already in `data/` (so you can click any year without running a full build first).
 
-`server.py` does two things: serves the static files (`index.html`, `styles.css`, `app.js`) and proxies any request under `/api/` to `https://api-web.nhle.com`. The proxy is needed because the NHL API does not send CORS headers, so the browser would otherwise block direct calls to it.
+To force a rebuild of specific years' data:
+
+```sh
+python3 server.py --build 2025 2024 2023
+```
+
+Run without arguments to refresh the latest 5 draft years (`PREWARM_COUNT`).
 
 ## Files
 
-- `index.html` — markup and layout
-- `styles.css` — styling
-- `app.js` — fetch, state, rendering (talks to `/api/v1/...` via the local proxy)
-- `server.py` — static server + NHL API proxy
+- `index.html` / `styles.css` / `app.js` — the static frontend
+- `server.py` — local dev server + `--build` CLI for data enrichment
+- `data/` — pre-built JSON consumed by the frontend (one file per year + `years.json`)
+- `.github/workflows/deploy.yml` — daily refresh + GitHub Pages deploy

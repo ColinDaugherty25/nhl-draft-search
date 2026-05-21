@@ -1,0 +1,61 @@
+name: Build & deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 11:00 UTC — well after the NHL data settles for the previous day.
+    - cron: "0 11 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Cancel an in-flight deploy if a new commit lands; keep the latest run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore data/ cache across runs
+        # Hits between runs keep old draft years' files without rebuilding.
+        # Only the latest PREWARM_COUNT years are refreshed each run.
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: nhl-data-v3-${{ github.run_id }}
+          restore-keys: |
+            nhl-data-v3-
+
+      - name: Refresh latest draft years
+        run: python3 server.py --build
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Ship the whole repo root (index.html, app.js, styles.css, data/).
+          # actions/upload-pages-artifact ignores .git automatically.
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

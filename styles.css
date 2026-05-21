@@ -173,28 +173,42 @@ body {
   font-weight: 600;
 }
 
-/* Right-align the three pick-number columns (Overall / Round / Pick). They're
- * numeric and read more cleanly aligned with the stats block to the right. */
-.picks th:nth-child(-n+3),
-.picks td:nth-child(-n+3) {
+/* Right-align the two pick-number columns (Overall / Round). They're numeric
+ * and read more cleanly aligned with the stats block to the right. */
+.picks th:nth-child(-n+2),
+.picks td:nth-child(-n+2) {
   text-align: right;
   width: 4em;
 }
 
 /* Player column: hold a comfortable width without flexing to the edge.
  * Slightly heavier weight so names stand out from the numeric columns. */
-.picks th:nth-child(5),
-.picks td:nth-child(5) {
+.picks th:nth-child(4),
+.picks td:nth-child(4) {
   min-width: 14em;
   padding-right: 24px;
 }
-.picks td:nth-child(5) {
+.picks td:nth-child(4) {
   font-weight: 500;
 }
 
 .logo-cell {
   width: 2.5em;
   padding-right: 0 !important;
+}
+
+.flag-cell {
+  width: 2em;
+  padding-right: 0 !important;
+}
+
+.row-flag {
+  width: 24px;
+  height: auto;
+  vertical-align: middle;
+  display: block;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 2px;
 }
 
 .stats-cell {

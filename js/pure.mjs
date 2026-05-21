@@ -72,6 +72,27 @@ export function nhlCrestForYear(year) {
   return year >= NHL_LOGO_ERA_SPLIT ? NHL_CREST_MODERN : NHL_CREST_CLASSIC;
 }
 
+// Country flags. The pick.countryCode in our data uses ISO 3166-1 alpha-3
+// codes (CAN, USA, CHE — not the IOC's CAN/USA/SUI). flagcdn.com serves SVG
+// flags keyed by alpha-2, so we map at lookup time. The list covers every
+// code that appears in data/enriched-v3-*.json across all 48 years (1979–
+// 2026); add more entries here when a new country shows up.
+export const COUNTRY_CODE_TO_ISO2 = {
+  CAN: "ca", USA: "us", SWE: "se", RUS: "ru", FIN: "fi", CZE: "cz",
+  SVK: "sk", DEU: "de", CHE: "ch", BLR: "by", LVA: "lv", UKR: "ua",
+  DNK: "dk", NOR: "no", KAZ: "kz", GBR: "gb", AUT: "at", POL: "pl",
+  FRA: "fr", SVN: "si", ITA: "it", CHN: "cn", JPN: "jp", HUN: "hu",
+  AUS: "au", KOR: "kr", LTU: "lt", ZAF: "za", HRV: "hr", BRA: "br",
+  NGA: "ng", EST: "ee", BHS: "bs", BEL: "be", MNE: "me", TZA: "tz",
+  HTI: "ht", THA: "th", JAM: "jm", MKD: "mk", NLD: "nl", UZB: "uz",
+  BRN: "bn",
+};
+
+export function flagUrlForCountry(code3) {
+  const iso2 = COUNTRY_CODE_TO_ISO2[code3];
+  return iso2 ? `https://flagcdn.com/${iso2}.svg` : null;
+}
+
 export function teamPageUrl(tricode) {
   if (!tricode) return null;
   const current = LINEAGE[tricode] ?? tricode;
@@ -115,7 +136,6 @@ export function sortValue(pick, key) {
   switch (key) {
     case "overallPick": return pick.overallPick ?? null;
     case "round":       return pick.round ?? null;
-    case "pickInRound": return pick.pickInRound ?? null;
     case "name": {
       const last = pick.lastName?.default ?? "";
       const first = pick.firstName?.default ?? "";
@@ -123,6 +143,7 @@ export function sortValue(pick, key) {
       return s || null;
     }
     case "positionCode": return pick.positionCode || null;
+    case "countryCode":  return pick.countryCode || null;
     case "gamesPlayed":
     case "goals":
     case "assists":

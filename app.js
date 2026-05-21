@@ -12,6 +12,7 @@ import {
   pickBestTeam,
   compareBy,
   nhlCrestForYear,
+  flagUrlForCountry,
 } from "./js/pure.mjs";
 
 const DATA_BASE = "data";
@@ -234,9 +235,9 @@ function rowFor(pick) {
 
   tr.appendChild(textCell(pick.overallPick ?? DASH));
   tr.appendChild(textCell(pick.round ?? DASH));
-  tr.appendChild(textCell(pick.pickInRound ?? DASH));
   tr.appendChild(logoCell(pick));
   tr.appendChild(nameCell(pick));
+  tr.appendChild(flagCell(pick));
   tr.appendChild(textCell(pick.positionCode || DASH));
   for (const value of statValues(pick)) {
     tr.appendChild(statCell(value));
@@ -326,4 +327,20 @@ function logoUrlForRow(pick) {
   // teams that drafted that year, every visible pick is from that year's team
   // and uses that team's era-correct logo automatically.
   return pick.teamLogoLight ?? null;
+}
+
+function flagCell(pick) {
+  const td = document.createElement("td");
+  td.className = "flag-cell";
+  const url = flagUrlForCountry(pick.countryCode);
+  if (!url) return td;
+  const img = document.createElement("img");
+  img.className = "row-flag";
+  img.alt = pick.countryCode ?? "";
+  img.src = url;
+  img.onerror = () => {
+    img.style.visibility = "hidden";
+  };
+  td.appendChild(img);
+  return td;
 }

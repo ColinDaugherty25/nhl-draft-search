@@ -7,6 +7,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
 import {
   ALL_TEAMS,
   LINEAGE,
@@ -20,7 +24,11 @@ import {
   NHL_CREST_MODERN,
   NHL_CREST_CLASSIC,
   NHL_LOGO_ERA_SPLIT,
+  flagUrlForCountry,
+  COUNTRY_CODE_TO_ISO2,
 } from "../../js/pure.mjs";
+
+const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 test("teamPageUrl — current franchise maps to NHL.com slug", () => {
   assert.equal(teamPageUrl("TOR"), "https://www.nhl.com/mapleleafs");
@@ -147,6 +155,44 @@ test("nhlCrestForYear — pre-2005 drafts use the classic orange shield", () => 
   assert.equal(nhlCrestForYear(2004), NHL_CREST_CLASSIC); // last classic-era draft
   assert.equal(nhlCrestForYear(1985), NHL_CREST_CLASSIC);
   assert.equal(nhlCrestForYear(1979), NHL_CREST_CLASSIC); // oldest year in our data
+});
+
+test("flagUrlForCountry — maps ISO alpha-3 to flagcdn.com URL", () => {
+  assert.equal(flagUrlForCountry("CAN"), "https://flagcdn.com/ca.svg");
+  assert.equal(flagUrlForCountry("USA"), "https://flagcdn.com/us.svg");
+  assert.equal(flagUrlForCountry("SWE"), "https://flagcdn.com/se.svg");
+});
+
+test("flagUrlForCountry — uses ISO alpha-3 not IOC (CHE not SUI for Switzerland)", () => {
+  // Switzerland: IOC code SUI, ISO 3166-1 alpha-3 CHE. NHL data uses CHE.
+  assert.equal(flagUrlForCountry("CHE"), "https://flagcdn.com/ch.svg");
+  // Sanity: the IOC code is not in our table.
+  assert.equal(flagUrlForCountry("SUI"), null);
+});
+
+test("flagUrlForCountry — unknown / falsy input yields null", () => {
+  assert.equal(flagUrlForCountry("XYZ"), null);
+  assert.equal(flagUrlForCountry(""), null);
+  assert.equal(flagUrlForCountry(null), null);
+  assert.equal(flagUrlForCountry(undefined), null);
+});
+
+test("COUNTRY_CODE_TO_ISO2 covers every countryCode in the 2025 + 1985 data", () => {
+  // Data-driven regression: catches "added a new country to the dataset but
+  // forgot to add its mapping here". Picks two ends of the year range so the
+  // coverage is broad.
+  const years = [2025, 1985];
+  const unknown = new Set();
+  for (const year of years) {
+    const path = join(PROJECT_ROOT, "data", `enriched-v3-${year}.json`);
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    for (const pick of data.picks) {
+      if (pick.countryCode && !(pick.countryCode in COUNTRY_CODE_TO_ISO2)) {
+        unknown.add(pick.countryCode);
+      }
+    }
+  }
+  assert.deepEqual([...unknown], [], `unmapped countryCodes: ${[...unknown].join(", ")}`);
 });
 
 test("REVERSE_LINEAGE is consistent with LINEAGE", () => {

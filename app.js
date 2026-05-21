@@ -168,9 +168,34 @@ function render() {
   }
 
   const rows = [...filtered].sort(compareBy(state.sortKey, state.sortDir));
+
+  // Round dividers only make sense when picks are visually grouped by round —
+  // that's the overallPick (default) and round sort keys, all-teams view only.
+  // Other sort keys (name, position, stats) interleave rounds and dividers
+  // would land at nearly every row.
+  const showDividers =
+    state.teamTricode === ALL_TEAMS &&
+    (state.sortKey === "overallPick" || state.sortKey === "round");
+
+  let lastRound = null;
   for (const pick of rows) {
+    if (showDividers && pick.round !== lastRound) {
+      tbody.appendChild(roundDividerRow(pick.round));
+      lastRound = pick.round;
+    }
     tbody.appendChild(rowFor(pick));
   }
+}
+
+function roundDividerRow(round) {
+  const tr = document.createElement("tr");
+  tr.className = "round-divider";
+  tr.dataset.round = String(round);
+  const td = document.createElement("td");
+  td.colSpan = 12;
+  td.textContent = `Round ${round}`;
+  tr.appendChild(td);
+  return tr;
 }
 
 function updateSortIndicator() {

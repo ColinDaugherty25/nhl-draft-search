@@ -3,7 +3,7 @@
 // toggle direction. Nulls always sink to the bottom.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openApp, pickYear } from "./_helpers.mjs";
+import { openApp, pickYear, PICK_ROW_SELECTOR } from "./_helpers.mjs";
 
 async function headerClass(page, key) {
   return page.$eval(`#picks th[data-key="${key}"]`, (th) => th.className);
@@ -20,7 +20,7 @@ test("clicking PTS first time sorts descending (stats default)", async () => {
     assert.match(cls, /sort-desc/, `expected sort-desc, got "${cls}"`);
 
     // First non-null points value in the table should be the max.
-    const points = await page.$$eval("#picks tbody tr", (rows) =>
+    const points = await page.$$eval(PICK_ROW_SELECTOR, (rows) =>
       rows
         .map((tr) => {
           const cells = tr.querySelectorAll(".stats-cell");
@@ -65,7 +65,7 @@ test("sorting by PTS ascending — nulls (—) still at bottom", async () => {
     await page.click('#picks th[data-key="points"]'); // second click: asc
     await page.waitForTimeout(100);
 
-    const lastRowPts = await page.$$eval("#picks tbody tr", (rows) => {
+    const lastRowPts = await page.$$eval(PICK_ROW_SELECTOR, (rows) => {
       const tr = rows[rows.length - 1];
       const cells = tr?.querySelectorAll(".stats-cell");
       return cells?.[3]?.textContent ?? null;

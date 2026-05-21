@@ -2,7 +2,7 @@
 // the team's logo in the header. Switching back to "All teams" hides it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openApp, pickYear } from "./_helpers.mjs";
+import { openApp, pickYear, PICK_ROW_SELECTOR } from "./_helpers.mjs";
 
 test("selecting Bruins narrows the table to BOS picks only", async () => {
   const { browser, page } = await openApp();
@@ -10,7 +10,7 @@ test("selecting Bruins narrows the table to BOS picks only", async () => {
     await pickYear(page, 2025);
     await page.selectOption("#team", "BOS");
     await page.waitForTimeout(150);
-    const tricodes = await page.$$eval("#picks tbody tr", (rows) =>
+    const tricodes = await page.$$eval(PICK_ROW_SELECTOR, (rows) =>
       rows.map((tr) => {
         const img = tr.querySelector(".row-logo");
         return img?.src?.match(/\/svg\/([A-Z]{3})/)?.[1];

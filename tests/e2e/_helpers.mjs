@@ -6,6 +6,11 @@ import { chromium } from "playwright";
 
 export const BASE_URL = process.env.NHL_TEST_URL ?? "http://localhost:8000";
 
+// Round-divider rows (<tr class="round-divider">) are interleaved with pick
+// rows in the All-teams view. When a test cares about pick rows specifically,
+// use this selector to skip dividers.
+export const PICK_ROW_SELECTOR = "#picks tbody tr:not(.round-divider)";
+
 // Locally we use channel: "chrome" so the test runner doesn't have to
 // download ~150MB of Playwright-bundled browsers. In CI (PLAYWRIGHT_CI=1)
 // there's no system Chrome, so use the bundled chromium installed by the

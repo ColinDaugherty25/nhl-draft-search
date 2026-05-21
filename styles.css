@@ -212,3 +212,18 @@ body {
   font-style: italic;
   padding: 24px !important;
 }
+
+.picks tbody tr.round-divider {
+  background: var(--row-alt);
+}
+.picks tbody tr.round-divider td {
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  padding: 10px 8px;
+}

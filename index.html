@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NHL Draft Explorer</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <header class="app-header">
+        <img id="team-logo" class="team-logo" alt="" hidden />
+        <h1>NHL Draft Explorer</h1>
+      </header>
+
+      <section class="controls">
+        <label>
+          Year
+          <select id="year"></select>
+        </label>
+        <label>
+          Team
+          <select id="team"></select>
+        </label>
+      </section>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <table id="picks" class="picks">
+        <thead>
+          <tr>
+            <th>Overall</th>
+            <th>Round</th>
+            <th>Pick</th>
+            <th>Player</th>
+            <th>Pos</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </main>
+  </body>
+</html>

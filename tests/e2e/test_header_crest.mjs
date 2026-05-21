@@ -41,3 +41,49 @@ test("accessible header reads 'NHL Draft Explorer' (alt + text)", async () => {
     await browser.close();
   }
 });
+
+test("crest swaps to classic shield for ≤2004 drafts and back to modern for ≥2005", async () => {
+  const { browser, page } = await openApp();
+  try {
+    // Wait for default crest (modern) to be loaded.
+    await page.waitForFunction(() => {
+      const img = document.querySelector(".nhl-crest");
+      return img.complete && img.naturalWidth > 0;
+    });
+
+    // Switch to 1985 — classic shield expected.
+    await page.selectOption("#year", "1985");
+    await page.waitForFunction(() => !document.getElementById("status").textContent);
+    await page.waitForFunction(() => {
+      const img = document.querySelector(".nhl-crest");
+      return img.src.endsWith("assets/nhl-classic.svg") && img.complete && img.naturalWidth > 0;
+    }, null, { timeout: 5000 });
+
+    // Back to 2025 — modern shield expected.
+    await page.selectOption("#year", "2025");
+    await page.waitForFunction(() => !document.getElementById("status").textContent);
+    await page.waitForFunction(() => {
+      const img = document.querySelector(".nhl-crest");
+      return img.src.endsWith("NHL_light.svg") && img.complete && img.naturalWidth > 0;
+    }, null, { timeout: 5000 });
+
+    // Cutover year edge case: 2004 = classic, 2005 = modern.
+    await page.selectOption("#year", "2004");
+    await page.waitForFunction(() => !document.getElementById("status").textContent);
+    await page.waitForFunction(
+      () => document.querySelector(".nhl-crest").src.endsWith("assets/nhl-classic.svg"),
+      null,
+      { timeout: 5000 }
+    );
+
+    await page.selectOption("#year", "2005");
+    await page.waitForFunction(() => !document.getElementById("status").textContent);
+    await page.waitForFunction(
+      () => document.querySelector(".nhl-crest").src.endsWith("NHL_light.svg"),
+      null,
+      { timeout: 5000 }
+    );
+  } finally {
+    await browser.close();
+  }
+});

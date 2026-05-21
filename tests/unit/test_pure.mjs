@@ -16,6 +16,10 @@ import {
   pickBestTeam,
   compareBy,
   sortValue,
+  nhlCrestForYear,
+  NHL_CREST_MODERN,
+  NHL_CREST_CLASSIC,
+  NHL_LOGO_ERA_SPLIT,
 } from "../../js/pure.mjs";
 
 test("teamPageUrl — current franchise maps to NHL.com slug", () => {
@@ -131,6 +135,18 @@ test("LINEAGE consistency — every successor has a NHL_TEAM_SLUGS entry", () =>
       `LINEAGE points ${from} -> ${to}, but ${to} has no NHL_TEAM_SLUGS entry`
     );
   }
+});
+
+test("nhlCrestForYear — cutover year (2005) and later use the modern shield", () => {
+  assert.equal(nhlCrestForYear(2025), NHL_CREST_MODERN);
+  assert.equal(nhlCrestForYear(NHL_LOGO_ERA_SPLIT), NHL_CREST_MODERN); // 2005 itself
+  assert.equal(nhlCrestForYear(2030), NHL_CREST_MODERN);
+});
+
+test("nhlCrestForYear — pre-2005 drafts use the classic orange shield", () => {
+  assert.equal(nhlCrestForYear(2004), NHL_CREST_CLASSIC); // last classic-era draft
+  assert.equal(nhlCrestForYear(1985), NHL_CREST_CLASSIC);
+  assert.equal(nhlCrestForYear(1979), NHL_CREST_CLASSIC); // oldest year in our data
 });
 
 test("REVERSE_LINEAGE is consistent with LINEAGE", () => {

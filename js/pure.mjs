@@ -59,6 +59,19 @@ export const DEFAULT_DIR = {
   pim: "desc",
 };
 
+// Era-accurate NHL crest. The league switched from the classic orange-shield
+// logo to the modern silver/black shield just before the 2005 draft, so any
+// draft year >= 2005 uses the modern logo; everything earlier uses the
+// classic. The modern logo is loaded from the same NHL CDN that serves team
+// logos; the classic shield is self-hosted (no NHL CDN entry for it).
+export const NHL_LOGO_ERA_SPLIT = 2005;
+export const NHL_CREST_MODERN = "https://assets.nhle.com/logos/nhl/svg/NHL_light.svg";
+export const NHL_CREST_CLASSIC = "assets/nhl-classic.svg";
+
+export function nhlCrestForYear(year) {
+  return year >= NHL_LOGO_ERA_SPLIT ? NHL_CREST_MODERN : NHL_CREST_CLASSIC;
+}
+
 export function teamPageUrl(tricode) {
   if (!tricode) return null;
   const current = LINEAGE[tricode] ?? tricode;

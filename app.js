@@ -11,6 +11,7 @@ import {
   teamPageUrl,
   pickBestTeam,
   compareBy,
+  nhlCrestForYear,
 } from "./js/pure.mjs";
 
 const DATA_BASE = "data";
@@ -105,6 +106,9 @@ async function loadYear(year) {
   const myToken = ++loadToken;
   setStatus(`Loading ${year} draft…`, "loading");
   document.querySelector("#picks tbody").replaceChildren();
+  // Swap the era-accurate NHL crest before the fetch completes so the header
+  // updates instantly even on slow networks / uncached year builds.
+  updateNhlCrest();
 
   try {
     const res = await fetch(`${DATA_BASE}/enriched-v${CACHE_VERSION}-${year}.json`);
@@ -123,6 +127,13 @@ async function loadYear(year) {
     updateTeamLogo();
     setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
   }
+}
+
+function updateNhlCrest() {
+  const img = document.querySelector(".nhl-crest");
+  if (!img) return;
+  const url = nhlCrestForYear(state.year);
+  if (!img.src.endsWith(url) && img.src !== url) img.src = url;
 }
 
 function updateTeamLogo() {

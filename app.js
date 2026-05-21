@@ -6,8 +6,13 @@
 const API_BASE = "/api/v1";
 const ENRICHED_BASE = "/enriched";
 const DASH = "—";
+const LOADING = "·";
 const ALL_TEAMS = "ALL";
 const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
+
+// Bumped on every loadYear call so stale in-flight responses can be ignored
+// when the user has already moved on to a different year.
+let loadToken = 0;
 
 // Historical tricode -> current franchise tricode. Used only to keep the
 // team selection across year changes (Carolina selected, switch to 1985 ->
@@ -111,22 +116,67 @@ function populateTeamSelect() {
 }
 
 async function loadYear(year) {
+  const myToken = ++loadToken;
   setStatus(`Loading ${year} draft…`, "loading");
   document.querySelector("#picks tbody").replaceChildren();
+
+  // Fire both fetches in parallel: raw arrives fast (~200ms) and gives us the
+  // table skeleton; enriched lands later (cold ~5-12s, cached ~20ms) and fills
+  // career stats in place. The user sees names + logos immediately.
+  const rawPromise = fetch(`${API_BASE}/draft/picks/${year}/all`).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+  const enrichedPromise = fetch(
+    `${ENRICHED_BASE}/draft/picks/${year}/all`,
+  )
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+
   try {
-    const res = await fetch(`${ENRICHED_BASE}/draft/picks/${year}/all`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    state.picks = data.picks || [];
+    const raw = await rawPromise;
+    if (myToken !== loadToken) return;
+    state.picks = raw.picks || [];
     populateTeamSelect();
     updateTeamLogo();
-    setStatus("", null);
     render();
+    setStatus("Loading stats…", "loading");
   } catch (err) {
+    if (myToken !== loadToken) return;
     state.picks = [];
     populateTeamSelect();
     updateTeamLogo();
     setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
+    return;
+  }
+
+  const enriched = await enrichedPromise;
+  if (myToken !== loadToken) return;
+  if (enriched?.picks) {
+    const byOverall = new Map(
+      enriched.picks.map((p) => [p.overallPick, p.careerStats]),
+    );
+    for (const pick of state.picks) {
+      pick.careerStats = byOverall.get(pick.overallPick) ?? null;
+    }
+    refreshStatCells();
+  } else {
+    // Enriched failed; mark all picks as resolved-with-no-data so the loading
+    // dots flip to dashes rather than spinning forever.
+    for (const pick of state.picks) pick.careerStats ??= null;
+    refreshStatCells();
+  }
+  setStatus("", null);
+}
+
+function refreshStatCells() {
+  for (const tr of document.querySelectorAll("#picks tbody tr")) {
+    if (!tr._pick) continue;
+    const cells = tr.querySelectorAll(".stats-cell");
+    const values = statValues(tr._pick);
+    values.forEach((v, i) => {
+      cells[i].textContent = v;
+    });
   }
 }
 
@@ -188,6 +238,7 @@ function emptyRow() {
 
 function rowFor(pick) {
   const tr = document.createElement("tr");
+  tr._pick = pick;
   const firstName = pick.firstName?.default ?? "";
   const lastName = pick.lastName?.default ?? "";
   const name = `${firstName} ${lastName}`.trim() || DASH;
@@ -205,6 +256,12 @@ function rowFor(pick) {
 }
 
 function statValues(pick) {
+  // careerStats is set to null once the enriched fetch resolves (with or
+  // without data). Before that it's undefined and we render a loading dot
+  // so users can tell "fetching" apart from "no NHL stats found".
+  if (!("careerStats" in pick) || pick.careerStats === undefined) {
+    return STAT_KEYS.map(() => LOADING);
+  }
   const cs = pick.careerStats;
   if (!cs || cs.gamesPlayed == null) {
     return STAT_KEYS.map(() => DASH);

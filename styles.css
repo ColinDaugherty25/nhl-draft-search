@@ -144,6 +144,15 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.picks tbody a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.picks tbody a:hover {
+  text-decoration: underline;
+}
+
 .picks tbody tr:nth-child(even) {
   background: var(--row-alt);
 }

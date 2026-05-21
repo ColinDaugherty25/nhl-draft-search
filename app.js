@@ -325,20 +325,37 @@ function emptyRow() {
 function rowFor(pick) {
   const tr = document.createElement("tr");
   tr._pick = pick;
-  const firstName = pick.firstName?.default ?? "";
-  const lastName = pick.lastName?.default ?? "";
-  const name = `${firstName} ${lastName}`.trim() || DASH;
 
   tr.appendChild(textCell(pick.overallPick ?? DASH));
   tr.appendChild(textCell(pick.round ?? DASH));
   tr.appendChild(textCell(pick.pickInRound ?? DASH));
   tr.appendChild(logoCell(pick));
-  tr.appendChild(textCell(name));
+  tr.appendChild(nameCell(pick));
   tr.appendChild(textCell(pick.positionCode || DASH));
   for (const value of statValues(pick)) {
     tr.appendChild(statCell(value));
   }
   return tr;
+}
+
+function nameCell(pick) {
+  const td = document.createElement("td");
+  td.className = "name-cell";
+  td.appendChild(playerNameNode(pick));
+  return td;
+}
+
+function playerNameNode(pick) {
+  const first = pick.firstName?.default ?? "";
+  const last = pick.lastName?.default ?? "";
+  const text = `${first} ${last}`.trim() || DASH;
+  if (!pick.playerId) return document.createTextNode(text);
+  const a = document.createElement("a");
+  a.href = `https://www.nhl.com/player/${pick.playerId}`;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = text;
+  return a;
 }
 
 function statValues(pick) {

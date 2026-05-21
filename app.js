@@ -55,6 +55,20 @@ const state = {
   teamTricode: ALL_TEAMS,
   picks: [],
   teamsByTricode: new Map(), // populated per year from pick.teamAbbrev/teamName/teamLogoLight
+  sortKey: "overallPick",
+  sortDir: "asc",
+};
+
+// First-click direction by column. Stats columns default to descending so
+// clicking PTS once shows top scorers first; text/order columns default to
+// ascending. Subsequent clicks on the same column toggle direction.
+const DEFAULT_DIR = {
+  gamesPlayed: "desc",
+  goals: "desc",
+  assists: "desc",
+  points: "desc",
+  plusMinus: "desc",
+  pim: "desc",
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -67,6 +81,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.year = Number(e.target.value);
     loadYear(state.year);
   });
+  document.querySelector("#picks thead").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-key]");
+    if (!th) return;
+    const key = th.dataset.key;
+    if (state.sortKey === key) {
+      state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+    } else {
+      state.sortKey = key;
+      state.sortDir = DEFAULT_DIR[key] ?? "asc";
+    }
+    updateSortIndicator();
+    render();
+  });
+  updateSortIndicator();
   await populateYearSelect();
   await loadYear(state.year);
 });
@@ -170,6 +198,13 @@ async function loadYear(year) {
 }
 
 function refreshStatCells() {
+  // If we're currently sorted by a stat column, the row order will change
+  // once careerStats lands — rebuild the table. Otherwise update cells in
+  // place so we don't lose scroll position or flash the table.
+  if (STAT_KEYS.includes(state.sortKey)) {
+    render();
+    return;
+  }
   for (const tr of document.querySelectorAll("#picks tbody tr")) {
     if (!tr._pick) continue;
     const cells = tr.querySelectorAll(".stats-cell");
@@ -177,6 +212,8 @@ function refreshStatCells() {
     values.forEach((v, i) => {
       cells[i].textContent = v;
     });
+    const nameTd = tr.querySelector(".name-cell");
+    if (nameTd) nameTd.replaceChildren(playerNameNode(tr._pick));
   }
 }
 
@@ -217,9 +254,58 @@ function render() {
     return;
   }
 
-  const rows = [...filtered].sort((a, b) => a.overallPick - b.overallPick);
+  const rows = [...filtered].sort(compareBy(state.sortKey, state.sortDir));
   for (const pick of rows) {
     tbody.appendChild(rowFor(pick));
+  }
+}
+
+function compareBy(key, dir) {
+  const sign = dir === "asc" ? 1 : -1;
+  return (a, b) => {
+    const av = sortValue(a, key);
+    const bv = sortValue(b, key);
+    // Nulls (missing data, loading dots) sink to the bottom regardless of dir
+    // so the user always sees real values first. Tie-break by overallPick to
+    // keep order stable when stats arrive and ties get broken.
+    if (av == null && bv == null) return a.overallPick - b.overallPick;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (av === bv) return a.overallPick - b.overallPick;
+    if (typeof av === "string") return sign * av.localeCompare(bv);
+    return sign * (av - bv);
+  };
+}
+
+function sortValue(pick, key) {
+  switch (key) {
+    case "overallPick": return pick.overallPick ?? null;
+    case "round":       return pick.round ?? null;
+    case "pickInRound": return pick.pickInRound ?? null;
+    case "name": {
+      const last = pick.lastName?.default ?? "";
+      const first = pick.firstName?.default ?? "";
+      const s = `${last} ${first}`.trim().toLowerCase();
+      return s || null;
+    }
+    case "positionCode": return pick.positionCode || null;
+    case "gamesPlayed":
+    case "goals":
+    case "assists":
+    case "points":
+    case "plusMinus":
+    case "pim":
+      // careerStats undefined → enriched not in yet → sort as null (bottom).
+      // careerStats === null → no NHL data → also null (bottom).
+      return pick.careerStats?.[key] ?? null;
+    default: return null;
+  }
+}
+
+function updateSortIndicator() {
+  for (const th of document.querySelectorAll("#picks thead th[data-key]")) {
+    th.classList.toggle("sort-asc", th.dataset.key === state.sortKey && state.sortDir === "asc");
+    th.classList.toggle("sort-desc", th.dataset.key === state.sortKey && state.sortDir === "desc");
   }
 }
 

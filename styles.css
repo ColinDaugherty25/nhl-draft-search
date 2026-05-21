@@ -120,6 +120,25 @@ body {
   letter-spacing: 0.06em;
 }
 
+.picks thead th[data-key] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.picks thead th[data-key]:hover {
+  color: CanvasText;
+}
+
+.picks thead th.sort-asc::after {
+  content: " ▲";
+  font-size: 0.7em;
+}
+
+.picks thead th.sort-desc::after {
+  content: " ▼";
+  font-size: 0.7em;
+}
+
 .picks tbody td {
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);

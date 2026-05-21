@@ -34,6 +34,28 @@ const REVERSE_LINEAGE = Object.entries(LINEAGE).reduce((acc, [oldTri, curTri]) =
   return acc;
 }, {});
 
+// Current-franchise tricode -> NHL.com URL slug. Historical tricodes
+// (HFD, QUE, MNS, ATL, etc.) go through LINEAGE first to find the current
+// franchise, then this map produces the slug. Anything not in the map
+// (defunct franchise with no successor) yields no link.
+const NHL_TEAM_SLUGS = {
+  ANA: "ducks", BOS: "bruins", BUF: "sabres", CAR: "hurricanes",
+  CBJ: "bluejackets", CGY: "flames", CHI: "blackhawks", COL: "avalanche",
+  DAL: "stars", DET: "redwings", EDM: "oilers", FLA: "panthers",
+  LAK: "kings", MIN: "wild", MTL: "canadiens", NJD: "devils",
+  NSH: "predators", NYI: "islanders", NYR: "rangers", OTT: "senators",
+  PHI: "flyers", PIT: "penguins", SEA: "kraken", SJS: "sharks",
+  STL: "blues", TBL: "lightning", TOR: "mapleleafs", UTA: "utah",
+  VAN: "canucks", VGK: "goldenknights", WPG: "jets", WSH: "capitals",
+};
+
+function teamPageUrl(tricode) {
+  if (!tricode) return null;
+  const current = LINEAGE[tricode] ?? tricode;
+  const slug = NHL_TEAM_SLUGS[current];
+  return slug ? `https://www.nhl.com/${slug}` : null;
+}
+
 // Given the previous selection and the set of tricodes available in the new
 // year, follow LINEAGE forward (e.g. HFD -> CAR) or backward (CAR -> HFD) to
 // keep the same franchise selected across year changes. Falls back to "All
@@ -167,19 +189,24 @@ async function loadYear(year) {
 }
 
 function updateTeamLogo() {
+  const link = document.getElementById("team-logo-link");
   const img = document.getElementById("team-logo");
   const team = state.teamsByTricode.get(state.teamTricode);
   if (!team || !team.logoUrl) {
-    img.hidden = true;
+    link.hidden = true;
+    link.removeAttribute("href");
     img.removeAttribute("src");
     img.alt = "";
     return;
   }
   img.src = team.logoUrl;
   img.alt = `${team.name} logo`;
-  img.hidden = false;
+  const url = teamPageUrl(state.teamTricode);
+  if (url) link.href = url;
+  else link.removeAttribute("href");
+  link.hidden = false;
   img.onerror = () => {
-    img.hidden = true;
+    link.hidden = true;
   };
 }
 
@@ -349,7 +376,17 @@ function logoCell(pick) {
   img.onerror = () => {
     img.style.visibility = "hidden";
   };
-  td.appendChild(img);
+  const url = teamPageUrl(pick.teamAbbrev);
+  if (url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.appendChild(img);
+    td.appendChild(a);
+  } else {
+    td.appendChild(img);
+  }
   return td;
 }
 

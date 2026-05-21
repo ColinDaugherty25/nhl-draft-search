@@ -132,6 +132,19 @@ body {
   width: 4em;
 }
 
+.logo-cell {
+  width: 2.5em;
+  padding-right: 0 !important;
+}
+
+.row-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  vertical-align: middle;
+  display: block;
+}
+
 .empty {
   text-align: center;
   color: var(--muted);

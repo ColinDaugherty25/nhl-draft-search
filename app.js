@@ -152,7 +152,7 @@ function render() {
 function emptyRow() {
   const tr = document.createElement("tr");
   const td = document.createElement("td");
-  td.colSpan = 5;
+  td.colSpan = 6;
   td.className = "empty";
   td.textContent =
     state.teamTricode === ALL_TEAMS
@@ -168,16 +168,32 @@ function rowFor(pick) {
   const lastName = pick.lastName?.default ?? "";
   const name = `${firstName} ${lastName}`.trim() || DASH;
 
-  for (const value of [
-    pick.overallPick ?? DASH,
-    pick.round ?? DASH,
-    pick.pickInRound ?? DASH,
-    name,
-    pick.positionCode || DASH,
-  ]) {
-    const td = document.createElement("td");
-    td.textContent = value;
-    tr.appendChild(td);
-  }
+  tr.appendChild(textCell(pick.overallPick ?? DASH));
+  tr.appendChild(textCell(pick.round ?? DASH));
+  tr.appendChild(textCell(pick.pickInRound ?? DASH));
+  tr.appendChild(logoCell(pick.teamAbbrev));
+  tr.appendChild(textCell(name));
+  tr.appendChild(textCell(pick.positionCode || DASH));
   return tr;
+}
+
+function textCell(value) {
+  const td = document.createElement("td");
+  td.textContent = value;
+  return td;
+}
+
+function logoCell(tricode) {
+  const td = document.createElement("td");
+  td.className = "logo-cell";
+  if (!tricode) return td;
+  const img = document.createElement("img");
+  img.className = "row-logo";
+  img.alt = "";
+  img.src = `https://assets.nhle.com/logos/nhl/svg/${tricode}_light.svg`;
+  img.onerror = () => {
+    img.style.visibility = "hidden";
+  };
+  td.appendChild(img);
+  return td;
 }

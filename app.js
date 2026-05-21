@@ -6,9 +6,25 @@ const API_BASE = "/api/v1";
 const DASH = "—";
 const ALL_TEAMS = "ALL";
 
-// Current 32 NHL franchises. Picks from defunct teams (e.g. HFD, QUE) still
-// appear in older draft data — they render under "All teams" but aren't in
-// this dropdown.
+// Historical tricode -> current franchise tricode. Selecting a current team
+// also includes picks from its franchise's older incarnations (Hartford
+// Whalers picks show up under Carolina, etc.). The dropdown only lists the
+// current 32 franchises.
+const LINEAGE = {
+  HFD: "CAR", // Hartford Whalers     -> Carolina Hurricanes  (1997)
+  QUE: "COL", // Quebec Nordiques     -> Colorado Avalanche   (1995)
+  MNS: "DAL", // Minnesota North Stars -> Dallas Stars        (1993)
+  CLR: "NJD", // Colorado Rockies     -> New Jersey Devils    (1982)
+  AFM: "CGY", // Atlanta Flames       -> Calgary Flames       (1980)
+  WIN: "UTA", // Original Winnipeg Jets -> PHX -> ARI -> Utah
+  PHX: "UTA", // Phoenix Coyotes      -> Arizona Coyotes -> Utah
+  ARI: "UTA", // Arizona Coyotes      -> Utah Hockey Club     (2024)
+  ATL: "WPG", // Atlanta Thrashers    -> Winnipeg Jets        (2011)
+};
+
+// Current 32 NHL franchises. The dropdown only ever lists these; predecessor
+// tricodes (HFD, QUE, MNS, CLR, AFM, WIN, PHX, ARI, ATL) are reachable by
+// selecting their current-day successor via LINEAGE.
 const TEAMS = [
   { tricode: "ANA", name: "Anaheim Ducks" },
   { tricode: "BOS", name: "Boston Bruins" },
@@ -175,7 +191,11 @@ function render() {
   const filtered =
     state.teamTricode === ALL_TEAMS
       ? state.picks
-      : state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
+      : state.picks.filter(
+          (p) =>
+            p.teamAbbrev === state.teamTricode ||
+            LINEAGE[p.teamAbbrev] === state.teamTricode,
+        );
 
   if (filtered.length === 0) {
     tbody.appendChild(emptyRow());

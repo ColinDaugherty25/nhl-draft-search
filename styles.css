@@ -107,6 +107,19 @@ body {
   color: var(--muted);
 }
 
+.picks thead th.stats-sub {
+  top: 38px;
+  text-align: right;
+  font-size: 0.75rem;
+  padding: 6px 6px;
+}
+
+.picks thead th.stats-group {
+  text-align: center;
+  border-left: 1px solid var(--border);
+  letter-spacing: 0.06em;
+}
+
 .picks tbody td {
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
@@ -130,6 +143,20 @@ body {
 .logo-cell {
   width: 2.5em;
   padding-right: 0 !important;
+}
+
+.stats-cell {
+  text-align: right;
+  width: 3em;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visual separator at the start of the stats block (column 7 = GP). */
+.picks tbody td:nth-child(7),
+.picks thead th.stats-sub:first-of-type {
+  border-left: 1px solid var(--border);
 }
 
 .row-logo {

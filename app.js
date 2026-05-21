@@ -149,10 +149,12 @@ function render() {
   }
 }
 
+const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
+
 function emptyRow() {
   const tr = document.createElement("tr");
   const td = document.createElement("td");
-  td.colSpan = 6;
+  td.colSpan = 12;
   td.className = "empty";
   td.textContent =
     state.teamTricode === ALL_TEAMS
@@ -174,7 +176,17 @@ function rowFor(pick) {
   tr.appendChild(logoCell(pick.teamAbbrev));
   tr.appendChild(textCell(name));
   tr.appendChild(textCell(pick.positionCode || DASH));
+  for (const _key of STAT_KEYS) {
+    tr.appendChild(statCell(DASH));
+  }
   return tr;
+}
+
+function statCell(value) {
+  const td = document.createElement("td");
+  td.className = "stats-cell";
+  td.textContent = value;
+  return td;
 }
 
 function textCell(value) {

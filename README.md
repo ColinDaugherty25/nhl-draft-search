@@ -2,6 +2,8 @@
 
 A static web app for browsing NHL Entry Draft picks by team and year. No build step, no dependencies (Python 3 is used only to serve the files and proxy the API).
 
+Repo: <https://github.com/ColinDaugherty25/nhl-draft-search>
+
 ## Run it
 
 ```sh

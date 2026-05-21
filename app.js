@@ -182,16 +182,21 @@ async function loadYear(year) {
   if (myToken !== loadToken) return;
   if (enriched?.picks) {
     const byOverall = new Map(
-      enriched.picks.map((p) => [p.overallPick, p.careerStats]),
+      enriched.picks.map((p) => [p.overallPick, p]),
     );
     for (const pick of state.picks) {
-      pick.careerStats = byOverall.get(pick.overallPick) ?? null;
+      const ep = byOverall.get(pick.overallPick);
+      pick.careerStats = ep?.careerStats ?? null;
+      pick.playerId = ep?.playerId ?? null;
     }
     refreshStatCells();
   } else {
     // Enriched failed; mark all picks as resolved-with-no-data so the loading
     // dots flip to dashes rather than spinning forever.
-    for (const pick of state.picks) pick.careerStats ??= null;
+    for (const pick of state.picks) {
+      pick.careerStats ??= null;
+      pick.playerId ??= null;
+    }
     refreshStatCells();
   }
   setStatus("", null);

@@ -18,6 +18,7 @@ body {
   max-width: 980px;
   margin: 0 auto;
   padding: 24px 20px 48px;
+  position: relative;
 }
 
 .app-header {
@@ -28,10 +29,20 @@ body {
   min-height: 56px;
 }
 
-/* Selected-team logo bookends the header on the right. When no team is
- * selected, link.hidden collapses it and the title sits alone on the left. */
+/* Selected-team logo: absolute-positioned anchor inside .container so it
+ * can span both the header row and the controls row (top of crest to
+ * bottom of dropdowns) and sit centered over the stats columns of the
+ * table below, instead of being inline-flex-flush-right. When no team is
+ * selected, link.hidden (display: none) takes the element out of render. */
 .app-header > #team-logo-link {
-  margin-left: auto;
+  position: absolute;
+  top: 32px;
+  height: 130px;
+  right: 134px;
+  margin-left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-header h1 {
@@ -50,8 +61,9 @@ body {
 }
 
 .team-logo {
-  width: 56px;
-  height: 56px;
+  height: 100%;
+  width: auto;
+  max-height: 130px;
   object-fit: contain;
 }
 

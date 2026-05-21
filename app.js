@@ -9,10 +9,10 @@ const DASH = "—";
 const ALL_TEAMS = "ALL";
 const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
 
-// Historical tricode -> current franchise tricode. Selecting a current team
-// also includes picks from its franchise's older incarnations (Hartford
-// Whalers picks show up under Carolina, etc.). The dropdown only lists the
-// current 32 franchises.
+// Historical tricode -> current franchise tricode. Used only to keep the
+// team selection across year changes (Carolina selected, switch to 1985 ->
+// auto-switch to "Hartford Whalers"). The dropdown itself is derived from
+// each year's picks, so old and new teams appear era-accurately.
 const LINEAGE = {
   HFD: "CAR", // Hartford Whalers     -> Carolina Hurricanes  (1997)
   QUE: "COL", // Quebec Nordiques     -> Colorado Avalanche   (1995)
@@ -25,52 +25,14 @@ const LINEAGE = {
   ATL: "WPG", // Atlanta Thrashers    -> Winnipeg Jets        (2011)
 };
 
-// Current 32 NHL franchises. The dropdown only ever lists these; predecessor
-// tricodes (HFD, QUE, MNS, CLR, AFM, WIN, PHX, ARI, ATL) are reachable by
-// selecting their current-day successor via LINEAGE.
-const TEAMS = [
-  { tricode: "ANA", name: "Anaheim Ducks" },
-  { tricode: "BOS", name: "Boston Bruins" },
-  { tricode: "BUF", name: "Buffalo Sabres" },
-  { tricode: "CGY", name: "Calgary Flames" },
-  { tricode: "CAR", name: "Carolina Hurricanes" },
-  { tricode: "CHI", name: "Chicago Blackhawks" },
-  { tricode: "COL", name: "Colorado Avalanche" },
-  { tricode: "CBJ", name: "Columbus Blue Jackets" },
-  { tricode: "DAL", name: "Dallas Stars" },
-  { tricode: "DET", name: "Detroit Red Wings" },
-  { tricode: "EDM", name: "Edmonton Oilers" },
-  { tricode: "FLA", name: "Florida Panthers" },
-  { tricode: "LAK", name: "Los Angeles Kings" },
-  { tricode: "MIN", name: "Minnesota Wild" },
-  { tricode: "MTL", name: "Montréal Canadiens" },
-  { tricode: "NSH", name: "Nashville Predators" },
-  { tricode: "NJD", name: "New Jersey Devils" },
-  { tricode: "NYI", name: "New York Islanders" },
-  { tricode: "NYR", name: "New York Rangers" },
-  { tricode: "OTT", name: "Ottawa Senators" },
-  { tricode: "PHI", name: "Philadelphia Flyers" },
-  { tricode: "PIT", name: "Pittsburgh Penguins" },
-  { tricode: "SJS", name: "San Jose Sharks" },
-  { tricode: "SEA", name: "Seattle Kraken" },
-  { tricode: "STL", name: "St. Louis Blues" },
-  { tricode: "TBL", name: "Tampa Bay Lightning" },
-  { tricode: "TOR", name: "Toronto Maple Leafs" },
-  { tricode: "UTA", name: "Utah Hockey Club" },
-  { tricode: "VAN", name: "Vancouver Canucks" },
-  { tricode: "VGK", name: "Vegas Golden Knights" },
-  { tricode: "WSH", name: "Washington Capitals" },
-  { tricode: "WPG", name: "Winnipeg Jets" },
-];
-
 const state = {
   year: null,
   teamTricode: ALL_TEAMS,
   picks: [],
+  teamsByTricode: new Map(), // populated per year from pick.teamAbbrev/teamName/teamLogoLight
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
-  populateTeamSelect();
   document.getElementById("team").addEventListener("change", (e) => {
     state.teamTricode = e.target.value;
     updateTeamLogo();
@@ -100,11 +62,32 @@ async function populateYearSelect() {
 }
 
 function populateTeamSelect() {
+  // Build the dropdown from the current year's picks so it lists only teams
+  // that were in the league that year, with era-accurate names. The previous
+  // selection is preserved if the franchise existed in this year too;
+  // otherwise we won't have a state.teamTricode change here, the caller
+  // handles cross-year auto-switching.
   const select = document.getElementById("team");
-  const all = new Option("All teams", ALL_TEAMS);
-  select.appendChild(all);
-  for (const team of TEAMS) {
+  const seen = new Map();
+  for (const pick of state.picks) {
+    const tri = pick.teamAbbrev;
+    if (!tri || seen.has(tri)) continue;
+    seen.set(tri, {
+      tricode: tri,
+      name: pick.teamName?.default ?? tri,
+      logoUrl: pick.teamLogoLight ?? null,
+    });
+  }
+  const teams = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  select.replaceChildren();
+  select.appendChild(new Option("All teams", ALL_TEAMS));
+  for (const team of teams) {
     select.appendChild(new Option(team.name, team.tricode));
+  }
+  state.teamsByTricode = seen;
+  if (!seen.has(state.teamTricode) && state.teamTricode !== ALL_TEAMS) {
+    state.teamTricode = ALL_TEAMS;
   }
   select.value = state.teamTricode;
 }
@@ -117,25 +100,29 @@ async function loadYear(year) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     state.picks = data.picks || [];
+    populateTeamSelect();
+    updateTeamLogo();
     setStatus("", null);
     render();
   } catch (err) {
     state.picks = [];
+    populateTeamSelect();
+    updateTeamLogo();
     setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
   }
 }
 
 function updateTeamLogo() {
   const img = document.getElementById("team-logo");
-  if (state.teamTricode === ALL_TEAMS) {
+  const team = state.teamsByTricode.get(state.teamTricode);
+  if (!team || !team.logoUrl) {
     img.hidden = true;
     img.removeAttribute("src");
     img.alt = "";
     return;
   }
-  const team = TEAMS.find((t) => t.tricode === state.teamTricode);
-  img.src = `https://assets.nhle.com/logos/nhl/svg/${state.teamTricode}_light.svg`;
-  img.alt = team ? `${team.name} logo` : `${state.teamTricode} logo`;
+  img.src = team.logoUrl;
+  img.alt = `${team.name} logo`;
   img.hidden = false;
   img.onerror = () => {
     img.hidden = true;
@@ -251,12 +238,8 @@ function logoCell(pick) {
 }
 
 function logoUrlForRow(pick) {
-  // Specific-team view: every row (including historicals merged via LINEAGE)
-  // uses the current franchise logo so the page reads as one team's history.
-  if (state.teamTricode !== ALL_TEAMS) {
-    return `https://assets.nhle.com/logos/nhl/svg/${state.teamTricode}_light.svg`;
-  }
-  // All-teams view: era-accurate logo straight from the pick payload. The API
-  // ships per-pick teamLogoLight URLs that work for defunct tricodes too.
+  // Era-accurate logo from the pick payload. Since the dropdown now only lists
+  // teams that drafted that year, every visible pick is from that year's team
+  // and uses that team's era-correct logo automatically.
   return pick.teamLogoLight ?? null;
 }

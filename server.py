@@ -17,6 +17,7 @@ import http.client
 import http.server
 import json
 import os
+import re
 import socketserver
 import sys
 import threading
@@ -35,7 +36,7 @@ ROUTES = (
 NHL_API = "https://api-web.nhle.com"
 NHL_SEARCH = "https://search.d3.nhle.com"
 
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 CACHE_TTL_SECONDS = 24 * 60 * 60
 # Bump when the enriched response shape changes so old cache files are ignored.
 CACHE_VERSION = 3
@@ -226,7 +227,11 @@ def _year_lock(year):
 
 
 def _cache_path(year):
-    return os.path.join(CACHE_DIR, f"enriched-v{CACHE_VERSION}-{year}.json")
+    return os.path.join(DATA_DIR, f"enriched-v{CACHE_VERSION}-{year}.json")
+
+
+def _years_path():
+    return os.path.join(DATA_DIR, "years.json")
 
 
 def _cache_fresh(path):
@@ -238,7 +243,7 @@ def _cache_fresh(path):
 
 def _enriched_response(year):
     """Return (status, body_bytes) for /enriched/draft/picks/{year}/all."""
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
     cache_path = _cache_path(year)
 
     if _cache_fresh(cache_path):
@@ -261,11 +266,28 @@ def _enriched_response(year):
         return 200, body
 
 
+def _write_years_snapshot(now_payload):
+    """Snapshot the year list to data/years.json so the frontend can populate
+    its <select> without a live API call. The payload mirrors what
+    /draft/picks/now returns ({draftYear, draftYears, ...}); we only need
+    those two fields."""
+    if not now_payload:
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    snapshot = {
+        "draftYear": now_payload.get("draftYear"),
+        "draftYears": now_payload.get("draftYears") or [],
+    }
+    with open(_years_path(), "w") as f:
+        json.dump(snapshot, f)
+
+
 def _prewarm_caches():
     """Background-build enriched caches for the latest PREWARM_COUNT draft
     years so a typical user click on a recent year is served from disk."""
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
     now = _upstream_json(f"{NHL_API}/v1/draft/picks/now")
+    _write_years_snapshot(now)
     latest = (now or {}).get("draftYear")
     if not latest:
         print("pre-warm: could not determine current draft year, skipping", flush=True)
@@ -284,31 +306,60 @@ def _prewarm_caches():
             print(f"pre-warm: {y} failed ({exc})", flush=True)
 
 
+def _build_data(year_args):
+    """CLI entry point: build enriched JSON files for the given years (or for
+    the latest PREWARM_COUNT years if year_args is empty), write data/years.json,
+    and return. Used by GitHub Actions and one-time seeding."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    now = _upstream_json(f"{NHL_API}/v1/draft/picks/now")
+    _write_years_snapshot(now)
+    if year_args:
+        years = sorted({int(y) for y in year_args}, reverse=True)
+    else:
+        latest = (now or {}).get("draftYear")
+        if not latest:
+            print("build: could not determine current draft year", flush=True)
+            return 1
+        years = [latest - i for i in range(PREWARM_COUNT)]
+    print(f"build: targeting {years}", flush=True)
+    failed = 0
+    for y in years:
+        t0 = time.time()
+        try:
+            status, _ = _enriched_response(y)
+            if status == 200:
+                print(f"build: {y} ready in {time.time() - t0:.1f}s", flush=True)
+            else:
+                print(f"build: {y} failed with status {status}", flush=True)
+                failed += 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"build: {y} failed ({exc})", flush=True)
+            failed += 1
+    return 0 if failed == 0 else 2
+
+
+_DATA_ENRICHED_RE = re.compile(rf"^/data/enriched-v{CACHE_VERSION}-(\d+)\.json$")
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith("/enriched/draft/picks/"):
-            self._enriched()
+        # On-demand build for data/enriched-v3-{year}.json so local dev can
+        # click any year without running --build first. Production (GitHub
+        # Pages) skips this code path entirely — every year is pre-built.
+        m = _DATA_ENRICHED_RE.match(self.path)
+        if m and not os.path.exists(os.path.join(DATA_DIR, os.path.basename(self.path))):
+            try:
+                status, body = _enriched_response(int(m.group(1)))
+            except Exception as exc:  # noqa: BLE001
+                self._error(502, f"enrichment error: {exc}")
+                return
+            self._respond(status, "application/json", body)
             return
         for prefix, base in ROUTES:
             if self.path.startswith(prefix):
                 self._proxy(base + self.path[len(prefix) - 1:])  # keep leading /
                 return
         super().do_GET()
-
-    def _enriched(self):
-        # /enriched/draft/picks/{year}/all
-        parts = self.path.strip("/").split("/")
-        try:
-            year = int(parts[3])
-        except (IndexError, ValueError):
-            self._error(400, "expected /enriched/draft/picks/{year}/all")
-            return
-        try:
-            status, body = _enriched_response(year)
-        except Exception as exc:  # noqa: BLE001
-            self._error(502, f"enrichment error: {exc}")
-            return
-        self._respond(status, "application/json", body)
 
     def _proxy(self, url):
         try:
@@ -332,6 +383,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--build":
+        sys.exit(_build_data(sys.argv[2:]))
     threading.Thread(target=_prewarm_caches, daemon=True).start()
     with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
         httpd.allow_reuse_address = True

@@ -1,12 +1,11 @@
 // NHL Draft Explorer — vanilla JS, no build step.
 
-// Pass-through proxy prefix for the raw NHL API (used for /draft/picks/now to
-// populate the year selector). Draft-year fetches go through /enriched instead
-// so the response carries career stats inline.
-const API_BASE = "/api/v1";
-const ENRICHED_BASE = "/enriched";
+// All data comes from pre-built static JSON in data/, populated by
+// server.py --build (locally) or the GitHub Pages deploy workflow. No
+// runtime proxy is required.
+const DATA_BASE = "data";
+const CACHE_VERSION = 3;
 const DASH = "—";
-const LOADING = "·";
 const ALL_TEAMS = "ALL";
 const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
 
@@ -100,10 +99,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function populateYearSelect() {
-  // /draft/picks/now 307-redirects to the current draft and includes
-  // draftYears (years with API data) and draftYear (the year currently
-  // populated). Default to draftYear so we don't open on an empty future draft.
-  const res = await fetch(`${API_BASE}/draft/picks/now`);
+  // Snapshot of the NHL API's /draft/picks/now ({draftYear, draftYears}),
+  // refreshed nightly by the deploy workflow. Default to draftYear so we
+  // don't open on an empty future draft.
+  const res = await fetch(`${DATA_BASE}/years.json`);
   const data = await res.json();
   const years = [...(data.draftYears || [])].sort((a, b) => b - a);
   const select = document.getElementById("year");
@@ -148,77 +147,22 @@ async function loadYear(year) {
   setStatus(`Loading ${year} draft…`, "loading");
   document.querySelector("#picks tbody").replaceChildren();
 
-  // Fire both fetches in parallel: raw arrives fast (~200ms) and gives us the
-  // table skeleton; enriched lands later (cold ~5-12s, cached ~20ms) and fills
-  // career stats in place. The user sees names + logos immediately.
-  const rawPromise = fetch(`${API_BASE}/draft/picks/${year}/all`).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
-  const enrichedPromise = fetch(
-    `${ENRICHED_BASE}/draft/picks/${year}/all`,
-  )
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null);
-
   try {
-    const raw = await rawPromise;
+    const res = await fetch(`${DATA_BASE}/enriched-v${CACHE_VERSION}-${year}.json`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
     if (myToken !== loadToken) return;
-    state.picks = raw.picks || [];
+    state.picks = data.picks || [];
     populateTeamSelect();
     updateTeamLogo();
     render();
-    setStatus("Loading stats…", "loading");
+    setStatus("", null);
   } catch (err) {
     if (myToken !== loadToken) return;
     state.picks = [];
     populateTeamSelect();
     updateTeamLogo();
     setStatus(`Couldn't load the ${year} draft (${err.message}).`, "error");
-    return;
-  }
-
-  const enriched = await enrichedPromise;
-  if (myToken !== loadToken) return;
-  if (enriched?.picks) {
-    const byOverall = new Map(
-      enriched.picks.map((p) => [p.overallPick, p]),
-    );
-    for (const pick of state.picks) {
-      const ep = byOverall.get(pick.overallPick);
-      pick.careerStats = ep?.careerStats ?? null;
-      pick.playerId = ep?.playerId ?? null;
-    }
-    refreshStatCells();
-  } else {
-    // Enriched failed; mark all picks as resolved-with-no-data so the loading
-    // dots flip to dashes rather than spinning forever.
-    for (const pick of state.picks) {
-      pick.careerStats ??= null;
-      pick.playerId ??= null;
-    }
-    refreshStatCells();
-  }
-  setStatus("", null);
-}
-
-function refreshStatCells() {
-  // If we're currently sorted by a stat column, the row order will change
-  // once careerStats lands — rebuild the table. Otherwise update cells in
-  // place so we don't lose scroll position or flash the table.
-  if (STAT_KEYS.includes(state.sortKey)) {
-    render();
-    return;
-  }
-  for (const tr of document.querySelectorAll("#picks tbody tr")) {
-    if (!tr._pick) continue;
-    const cells = tr.querySelectorAll(".stats-cell");
-    const values = statValues(tr._pick);
-    values.forEach((v, i) => {
-      cells[i].textContent = v;
-    });
-    const nameTd = tr.querySelector(".name-cell");
-    if (nameTd) nameTd.replaceChildren(playerNameNode(tr._pick));
   }
 }
 
@@ -329,7 +273,6 @@ function emptyRow() {
 
 function rowFor(pick) {
   const tr = document.createElement("tr");
-  tr._pick = pick;
 
   tr.appendChild(textCell(pick.overallPick ?? DASH));
   tr.appendChild(textCell(pick.round ?? DASH));
@@ -364,12 +307,6 @@ function playerNameNode(pick) {
 }
 
 function statValues(pick) {
-  // careerStats is set to null once the enriched fetch resolves (with or
-  // without data). Before that it's undefined and we render a loading dot
-  // so users can tell "fetching" apart from "no NHL stats found".
-  if (!("careerStats" in pick) || pick.careerStats === undefined) {
-    return STAT_KEYS.map(() => LOADING);
-  }
   const cs = pick.careerStats;
   if (!cs || cs.gamesPlayed == null) {
     return STAT_KEYS.map(() => DASH);

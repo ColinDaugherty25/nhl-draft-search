@@ -28,6 +28,12 @@ body {
   min-height: 56px;
 }
 
+/* Selected-team logo bookends the header on the right. When no team is
+ * selected, link.hidden collapses it and the title sits alone on the left. */
+.app-header > #team-logo-link {
+  margin-left: auto;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 1.6rem;

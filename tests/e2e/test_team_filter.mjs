@@ -40,3 +40,24 @@ test("header logo appears for a team and hides on All teams", async () => {
     await browser.close();
   }
 });
+
+test("selected-team logo sits at the right end of the header (past the h1 title)", async () => {
+  const { browser, page } = await openApp();
+  try {
+    await pickYear(page, 2025);
+    await page.selectOption("#team", "BOS");
+    await page.waitForTimeout(100);
+    const rects = await page.evaluate(() => {
+      const h1 = document.querySelector("h1").getBoundingClientRect();
+      const link = document.querySelector("#team-logo-link").getBoundingClientRect();
+      return { h1Right: h1.right, linkLeft: link.left, linkWidth: link.width };
+    });
+    assert.ok(rects.linkWidth > 0, "team-logo-link should have non-zero width when shown");
+    assert.ok(
+      rects.linkLeft > rects.h1Right,
+      `expected team logo at right of h1: h1.right=${rects.h1Right} linkLeft=${rects.linkLeft}`
+    );
+  } finally {
+    await browser.close();
+  }
+});

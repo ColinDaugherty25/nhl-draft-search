@@ -145,21 +145,21 @@ export function teamHistoryFilter(pick, currentTricode) {
 }
 
 // Comparator wrapping compareBy with year-first ordering for team-history mode.
-// When grouping by year (overallPick or round sorts), sort by pick.draftYear in
-// `dir` first, then compareBy(key, dir) within the year. Otherwise (stats/name
-// sorts, or non-team-history mode), return compareBy(key, dir) unchanged.
+// When grouping by year (overallPick or round sorts), year groups always go
+// newest-first (recent drafts read more often than ancient ones), and within a
+// year picks follow compareBy(key, dir). For stats/name sorts (or non
+// team-history mode) return compareBy(key, dir) unchanged.
 export function compareByForMode(mode, key, dir) {
   const inner = compareBy(key, dir);
   if (mode !== "team-history") return inner;
   if (key !== "overallPick" && key !== "round") return inner;
-  const sign = dir === "asc" ? 1 : -1;
   return (a, b) => {
     const ay = a.draftYear ?? null;
     const by = b.draftYear ?? null;
     if (ay !== by) {
       if (ay == null) return 1;
       if (by == null) return -1;
-      return sign * (ay - by);
+      return by - ay;
     }
     return inner(a, b);
   };

@@ -267,7 +267,7 @@ test("compareByForMode — non team-history mode delegates to compareBy", () => 
   assert.deepEqual(picks.map((p) => p.overallPick), [1, 2, 3]);
 });
 
-test("compareByForMode — team-history mode groups by year first (asc)", () => {
+test("compareByForMode — team-history mode: year groups newest-first, within-year asc", () => {
   const picks = [
     { overallPick: 1, draftYear: 2025 },
     { overallPick: 1, draftYear: 1985 },
@@ -275,23 +275,24 @@ test("compareByForMode — team-history mode groups by year first (asc)", () => 
     { overallPick: 5, draftYear: 2025 },
   ];
   picks.sort(compareByForMode("team-history", "overallPick", "asc"));
-  // 1985 group (oldest) first, then 2025; within year ascending by overall.
+  // Newest year group first; within-year overall ascending.
   assert.deepEqual(picks.map((p) => [p.draftYear, p.overallPick]), [
-    [1985, 1],
-    [1985, 200],
     [2025, 1],
     [2025, 5],
+    [1985, 1],
+    [1985, 200],
   ]);
 });
 
-test("compareByForMode — team-history mode groups by year first (desc)", () => {
+test("compareByForMode — team-history mode: year direction stays newest-first when within-year is desc", () => {
   const picks = [
     { overallPick: 1, draftYear: 1985 },
     { overallPick: 1, draftYear: 2025 },
     { overallPick: 5, draftYear: 2025 },
   ];
   picks.sort(compareByForMode("team-history", "overallPick", "desc"));
-  // Newest year first; within year, overall desc.
+  // Year groups stay newest-first regardless of within-year direction; the
+  // user always reads recent drafts at the top.
   assert.deepEqual(picks.map((p) => [p.draftYear, p.overallPick]), [
     [2025, 5],
     [2025, 1],

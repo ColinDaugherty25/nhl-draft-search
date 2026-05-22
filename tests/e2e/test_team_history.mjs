@@ -51,7 +51,7 @@ test("All years + Carolina renders picks from both CAR and HFD eras", async () =
   }
 });
 
-test("Year-divider rows appear in ascending year order on default Overall sort", async () => {
+test("Year-divider rows appear newest-first by default", async () => {
   const { browser, page } = await openApp();
   try {
     await enterTeamHistory(page, "CAR");
@@ -61,16 +61,19 @@ test("Year-divider rows appear in ascending year order on default Overall sort",
     // Each divider's text matches its year attribute.
     for (const d of divs) assert.equal(d.text, String(d.year));
 
-    // Default sort is overallPick asc, so years go oldest → newest.
+    // Year groups always go newest-first so recent drafts sit at the top.
     const years = divs.map((d) => d.year);
-    const sortedAsc = [...years].sort((a, b) => a - b);
-    assert.deepEqual(years, sortedAsc, "year dividers should be ascending on default sort");
+    const sortedDesc = [...years].sort((a, b) => b - a);
+    assert.deepEqual(years, sortedDesc, "year dividers should be newest-first");
   } finally {
     await browser.close();
   }
 });
 
-test("Toggling Overall to descending reorders year dividers newest → oldest", async () => {
+test("Year-divider order stays newest-first after toggling Overall sort", async () => {
+  // Year-group direction is decoupled from within-year sort direction; the
+  // toggle reverses pick order within each year but the year sections
+  // themselves always lead with the most recent draft.
   const { browser, page } = await openApp();
   try {
     await enterTeamHistory(page, "CAR");
@@ -79,7 +82,7 @@ test("Toggling Overall to descending reorders year dividers newest → oldest", 
     const divs = await yearDividers(page);
     const years = divs.map((d) => d.year);
     const sortedDesc = [...years].sort((a, b) => b - a);
-    assert.deepEqual(years, sortedDesc, "year dividers should be descending after toggle");
+    assert.deepEqual(years, sortedDesc, "year dividers should remain newest-first");
   } finally {
     await browser.close();
   }

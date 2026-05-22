@@ -170,7 +170,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.picks tbody tr:not(.round-divider):hover {
+.picks tbody tr:not(.round-divider):not(.year-divider):hover {
   background: color-mix(in srgb, currentColor 9%, transparent);
 }
 
@@ -258,10 +258,12 @@ body {
   padding: 24px !important;
 }
 
-.picks tbody tr.round-divider {
+.picks tbody tr.round-divider,
+.picks tbody tr.year-divider {
   background: var(--row-alt);
 }
-.picks tbody tr.round-divider td {
+.picks tbody tr.round-divider td,
+.picks tbody tr.year-divider td {
   text-align: center;
   font-size: 0.8rem;
   font-weight: 600;

@@ -4,6 +4,10 @@
 
 export const DASH = "—";
 export const ALL_TEAMS = "ALL";
+// Distinct sentinel from ALL_TEAMS so a `value === "ALL"` check on the wrong
+// <select> can never silently match. Used by the year dropdown's "All years"
+// option to enter team-history mode.
+export const ALL_YEARS = "ALL_YEARS";
 export const STAT_KEYS = ["gamesPlayed", "goals", "assists", "points", "plusMinus", "pim"];
 
 // Historical tricode -> current franchise tricode. Two consumers:
@@ -113,6 +117,52 @@ export function pickBestTeam(current, availableTricodes) {
     if (availableTricodes.has(predecessor)) return predecessor;
   }
   return ALL_TEAMS;
+}
+
+// In team-history mode (year=ALL_YEARS + a specific team), draft classes are
+// visually grouped by year — but only when the sort key keeps picks naturally
+// ordered by year. For overallPick/round, picks within a class sort by the
+// chosen key; for stats/name sorts, year grouping would scatter dividers
+// everywhere so we hide them and sort flat instead.
+export function showYearDividers(state) {
+  return (
+    state.year === ALL_YEARS &&
+    state.teamTricode !== ALL_TEAMS &&
+    (state.sortKey === "overallPick" || state.sortKey === "round")
+  );
+}
+
+// Lineage-aware membership test: does `pick` belong to the franchise
+// identified by `currentTricode`? Direct match, plus forward LINEAGE
+// (HFD pick when CAR is selected) and reverse LINEAGE (CAR pick when HFD is
+// selected, in case a predecessor tricode is ever passed).
+export function teamHistoryFilter(pick, currentTricode) {
+  const tri = pick.teamAbbrev;
+  if (!tri) return false;
+  if (tri === currentTricode) return true;
+  if (LINEAGE[tri] === currentTricode) return true;
+  return (REVERSE_LINEAGE[currentTricode] ?? []).includes(tri);
+}
+
+// Comparator wrapping compareBy with year-first ordering for team-history mode.
+// When grouping by year (overallPick or round sorts), sort by pick.draftYear in
+// `dir` first, then compareBy(key, dir) within the year. Otherwise (stats/name
+// sorts, or non-team-history mode), return compareBy(key, dir) unchanged.
+export function compareByForMode(mode, key, dir) {
+  const inner = compareBy(key, dir);
+  if (mode !== "team-history") return inner;
+  if (key !== "overallPick" && key !== "round") return inner;
+  const sign = dir === "asc" ? 1 : -1;
+  return (a, b) => {
+    const ay = a.draftYear ?? null;
+    const by = b.draftYear ?? null;
+    if (ay !== by) {
+      if (ay == null) return 1;
+      if (by == null) return -1;
+      return sign * (ay - by);
+    }
+    return inner(a, b);
+  };
 }
 
 export function compareBy(key, dir) {

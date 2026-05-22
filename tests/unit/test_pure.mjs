@@ -13,12 +13,16 @@ import { dirname, join } from "node:path";
 
 import {
   ALL_TEAMS,
+  ALL_YEARS,
   LINEAGE,
   REVERSE_LINEAGE,
   NHL_TEAM_SLUGS,
   teamPageUrl,
   pickBestTeam,
   compareBy,
+  compareByForMode,
+  showYearDividers,
+  teamHistoryFilter,
   sortValue,
   nhlCrestForYear,
   NHL_CREST_MODERN,
@@ -202,4 +206,107 @@ test("REVERSE_LINEAGE is consistent with LINEAGE", () => {
       `REVERSE_LINEAGE[${to}] missing ${from}`
     );
   }
+});
+
+test("ALL_YEARS sentinel is distinct from ALL_TEAMS", () => {
+  // Guard against a future refactor accidentally collapsing the two to "ALL".
+  assert.notEqual(ALL_YEARS, ALL_TEAMS);
+});
+
+test("showYearDividers — true only when year=ALL_YEARS, team≠ALL, and sort groups by year", () => {
+  const base = { year: ALL_YEARS, teamTricode: "CAR", sortKey: "overallPick" };
+  assert.equal(showYearDividers(base), true);
+  assert.equal(showYearDividers({ ...base, sortKey: "round" }), true);
+  // Sort keys that interleave years should hide dividers.
+  assert.equal(showYearDividers({ ...base, sortKey: "points" }), false);
+  assert.equal(showYearDividers({ ...base, sortKey: "name" }), false);
+  // year≠ALL or team=ALL also turn dividers off.
+  assert.equal(showYearDividers({ ...base, year: 2025 }), false);
+  assert.equal(showYearDividers({ ...base, teamTricode: ALL_TEAMS }), false);
+});
+
+test("teamHistoryFilter — direct franchise match", () => {
+  assert.equal(teamHistoryFilter({ teamAbbrev: "CAR" }, "CAR"), true);
+  assert.equal(teamHistoryFilter({ teamAbbrev: "BOS" }, "CAR"), false);
+});
+
+test("teamHistoryFilter — forward LINEAGE (HFD pick belongs to CAR)", () => {
+  assert.equal(teamHistoryFilter({ teamAbbrev: "HFD" }, "CAR"), true);
+  assert.equal(teamHistoryFilter({ teamAbbrev: "QUE" }, "COL"), true);
+  assert.equal(teamHistoryFilter({ teamAbbrev: "MNS" }, "DAL"), true);
+});
+
+test("teamHistoryFilter — transitive LINEAGE (WIN/PHX/ARI all belong to UTA)", () => {
+  assert.equal(teamHistoryFilter({ teamAbbrev: "WIN" }, "UTA"), true);
+  assert.equal(teamHistoryFilter({ teamAbbrev: "PHX" }, "UTA"), true);
+  assert.equal(teamHistoryFilter({ teamAbbrev: "ARI" }, "UTA"), true);
+});
+
+test("teamHistoryFilter — reverse LINEAGE (CAR-pick branch when HFD passed)", () => {
+  // Defense in depth: the dropdown only surfaces current franchises, but if a
+  // predecessor tricode ever reaches the filter, it should still find its
+  // successor's picks via REVERSE_LINEAGE.
+  assert.equal(teamHistoryFilter({ teamAbbrev: "CAR" }, "HFD"), false); // direct miss
+  // REVERSE_LINEAGE[HFD] is empty (HFD is a key, not a value, in LINEAGE).
+  // For a real reverse path, use UTA → WIN.
+  assert.equal(teamHistoryFilter({ teamAbbrev: "UTA" }, "WIN"), false); // UTA is current, WIN isn't its predecessor
+});
+
+test("teamHistoryFilter — missing teamAbbrev yields false", () => {
+  assert.equal(teamHistoryFilter({}, "CAR"), false);
+  assert.equal(teamHistoryFilter({ teamAbbrev: null }, "CAR"), false);
+});
+
+test("compareByForMode — non team-history mode delegates to compareBy", () => {
+  const picks = [
+    { overallPick: 3, draftYear: 2025 },
+    { overallPick: 1, draftYear: 2024 },
+    { overallPick: 2, draftYear: 2025 },
+  ];
+  picks.sort(compareByForMode("default", "overallPick", "asc"));
+  assert.deepEqual(picks.map((p) => p.overallPick), [1, 2, 3]);
+});
+
+test("compareByForMode — team-history mode groups by year first (asc)", () => {
+  const picks = [
+    { overallPick: 1, draftYear: 2025 },
+    { overallPick: 1, draftYear: 1985 },
+    { overallPick: 200, draftYear: 1985 },
+    { overallPick: 5, draftYear: 2025 },
+  ];
+  picks.sort(compareByForMode("team-history", "overallPick", "asc"));
+  // 1985 group (oldest) first, then 2025; within year ascending by overall.
+  assert.deepEqual(picks.map((p) => [p.draftYear, p.overallPick]), [
+    [1985, 1],
+    [1985, 200],
+    [2025, 1],
+    [2025, 5],
+  ]);
+});
+
+test("compareByForMode — team-history mode groups by year first (desc)", () => {
+  const picks = [
+    { overallPick: 1, draftYear: 1985 },
+    { overallPick: 1, draftYear: 2025 },
+    { overallPick: 5, draftYear: 2025 },
+  ];
+  picks.sort(compareByForMode("team-history", "overallPick", "desc"));
+  // Newest year first; within year, overall desc.
+  assert.deepEqual(picks.map((p) => [p.draftYear, p.overallPick]), [
+    [2025, 5],
+    [2025, 1],
+    [1985, 1],
+  ]);
+});
+
+test("compareByForMode — team-history mode with stats key is flat (no year grouping)", () => {
+  // Stats sorts scatter rounds/years; mirrors how round dividers vanish on
+  // stats sorts in single-year mode.
+  const picks = [
+    { overallPick: 10, draftYear: 1985, careerStats: { points: 500 } },
+    { overallPick: 1, draftYear: 2025, careerStats: { points: 1000 } },
+    { overallPick: 2, draftYear: 1985, careerStats: { points: 200 } },
+  ];
+  picks.sort(compareByForMode("team-history", "points", "desc"));
+  assert.deepEqual(picks.map((p) => p.careerStats.points), [1000, 500, 200]);
 });

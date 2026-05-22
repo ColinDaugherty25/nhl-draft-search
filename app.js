@@ -6,12 +6,17 @@
 import {
   DASH,
   ALL_TEAMS,
+  ALL_YEARS,
   STAT_KEYS,
   DEFAULT_DIR,
   teamPageUrl,
   pickBestTeam,
   compareBy,
+  compareByForMode,
+  showYearDividers,
+  teamHistoryFilter,
   nhlCrestForYear,
+  NHL_CREST_MODERN,
   flagUrlForCountry,
 } from "./js/pure.mjs";
 
@@ -24,6 +29,7 @@ let loadToken = 0;
 
 const state = {
   year: null,
+  years: [],            // populated by populateYearSelect; iterated by loadAllYears
   teamTricode: ALL_TEAMS,
   picks: [],
   teamsByTricode: new Map(), // populated per year from pick.teamAbbrev/teamName/teamLogoLight
@@ -38,7 +44,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     render();
   });
   document.getElementById("year").addEventListener("change", (e) => {
-    state.year = Number(e.target.value);
+    const v = e.target.value;
+    state.year = v === ALL_YEARS ? ALL_YEARS : Number(v);
     loadYear(state.year);
   });
   document.querySelector("#picks thead").addEventListener("click", (e) => {
@@ -62,11 +69,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function populateYearSelect() {
   // Snapshot of the NHL API's /draft/picks/now ({draftYear, draftYears}),
   // refreshed nightly by the deploy workflow. Default to draftYear so we
-  // don't open on an empty future draft.
+  // don't open on an empty future draft. "All years" sits at the top to
+  // enter team-history mode without auto-selecting it on first paint.
   const res = await fetch(`${DATA_BASE}/years.json`);
   const data = await res.json();
   const years = [...(data.draftYears || [])].sort((a, b) => b - a);
+  state.years = years;
   const select = document.getElementById("year");
+  select.appendChild(new Option("All years", ALL_YEARS));
   for (const year of years) {
     select.appendChild(new Option(String(year), String(year)));
   }
@@ -75,14 +85,24 @@ async function populateYearSelect() {
 }
 
 function populateTeamSelect() {
-  // Build the dropdown from the current year's picks so it lists only teams
-  // that were in the league that year, with era-accurate names. The previous
-  // selection is preserved if the franchise existed in this year too;
-  // otherwise we won't have a state.teamTricode change here, the caller
-  // handles cross-year auto-switching.
+  // Build the dropdown from the picks of the relevant year — for single-year
+  // mode that's every pick currently loaded, with era-accurate names. In
+  // team-history mode (state.year === ALL_YEARS) state.picks holds every
+  // year concatenated, so we narrow to the most-recent year that actually has
+  // picks (an upcoming-but-undrafted year like 2026 has 0 picks and would
+  // produce an empty dropdown). That gives the current 32 franchises with
+  // current names. pickBestTeam preserves the selection across mode switches.
   const select = document.getElementById("team");
+  let sourcePicks;
+  if (state.year === ALL_YEARS) {
+    const years = state.picks.map((p) => p.draftYear).filter((y) => y != null);
+    const latest = years.length ? Math.max(...years) : null;
+    sourcePicks = latest == null ? [] : state.picks.filter((p) => p.draftYear === latest);
+  } else {
+    sourcePicks = state.picks;
+  }
   const seen = new Map();
-  for (const pick of state.picks) {
+  for (const pick of sourcePicks) {
     const tri = pick.teamAbbrev;
     if (!tri || seen.has(tri)) continue;
     seen.set(tri, {
@@ -104,6 +124,7 @@ function populateTeamSelect() {
 }
 
 async function loadYear(year) {
+  if (year === ALL_YEARS) return loadAllYears();
   const myToken = ++loadToken;
   setStatus(`Loading ${year} draft…`, "loading");
   document.querySelector("#picks tbody").replaceChildren();
@@ -130,10 +151,48 @@ async function loadYear(year) {
   }
 }
 
+async function loadAllYears() {
+  const myToken = ++loadToken;
+  setStatus("Loading all drafts…", "loading");
+  document.querySelector("#picks tbody").replaceChildren();
+  updateNhlCrest();
+
+  try {
+    // Fetch every year in parallel. Each year file is ~50KB so the total
+    // payload is a few MB; the browser HTTP cache makes re-entry instant.
+    const results = await Promise.all(
+      state.years.map((year) =>
+        fetch(`${DATA_BASE}/enriched-v${CACHE_VERSION}-${year}.json`).then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status} on ${year}`);
+          const data = await res.json();
+          // Inject draftYear so the comparator + year-divider grouping +
+          // dropdown filter can read it off each pick.
+          for (const pick of data.picks || []) pick.draftYear = year;
+          return data.picks || [];
+        })
+      )
+    );
+    if (myToken !== loadToken) return;
+    state.picks = results.flat();
+    populateTeamSelect();
+    updateTeamLogo();
+    render();
+    setStatus("", null);
+  } catch (err) {
+    if (myToken !== loadToken) return;
+    state.picks = [];
+    populateTeamSelect();
+    updateTeamLogo();
+    setStatus(`Couldn't load all drafts (${err.message}).`, "error");
+  }
+}
+
 function updateNhlCrest() {
   const img = document.querySelector(".nhl-crest");
   if (!img) return;
-  const url = nhlCrestForYear(state.year);
+  // Team-history mode spans every era; pin to the modern crest rather than
+  // letting nhlCrestForYear() coerce "ALL_YEARS" to NaN and fall to classic.
+  const url = state.year === ALL_YEARS ? NHL_CREST_MODERN : nhlCrestForYear(state.year);
   if (!img.src.endsWith(url) && img.src !== url) img.src = url;
 }
 
@@ -169,29 +228,49 @@ function render() {
   const tbody = document.querySelector("#picks tbody");
   tbody.replaceChildren();
 
-  const filtered =
-    state.teamTricode === ALL_TEAMS
-      ? state.picks
-      : state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
+  const teamHistoryMode = state.year === ALL_YEARS;
+  // Lineage-aware filter in team-history mode (HFD picks belong to CAR, etc.);
+  // exact-tricode match in single-year mode where era-accurate names already
+  // disambiguate the dropdown.
+  let filtered;
+  if (state.teamTricode === ALL_TEAMS) {
+    filtered = teamHistoryMode ? [] : state.picks;
+  } else if (teamHistoryMode) {
+    filtered = state.picks.filter((p) => teamHistoryFilter(p, state.teamTricode));
+  } else {
+    filtered = state.picks.filter((p) => p.teamAbbrev === state.teamTricode);
+  }
 
   if (filtered.length === 0) {
     tbody.appendChild(emptyRow());
     return;
   }
 
-  const rows = [...filtered].sort(compareBy(state.sortKey, state.sortDir));
+  const comparator = teamHistoryMode
+    ? compareByForMode("team-history", state.sortKey, state.sortDir)
+    : compareBy(state.sortKey, state.sortDir);
+  const rows = [...filtered].sort(comparator);
 
   // Round dividers only make sense when picks are visually grouped by round —
   // that's the overallPick (default) and round sort keys, all-teams view only.
   // Other sort keys (name, position, stats) interleave rounds and dividers
-  // would land at nearly every row.
-  const showDividers =
+  // would land at nearly every row. Year dividers play the same role in
+  // team-history mode, gated by showYearDividers.
+  const showRoundDividers =
+    !teamHistoryMode &&
     state.teamTricode === ALL_TEAMS &&
     (state.sortKey === "overallPick" || state.sortKey === "round");
+  const showYearDiv = showYearDividers(state);
 
   let lastRound = null;
+  let lastYear = null;
   for (const pick of rows) {
-    if (showDividers && pick.round !== lastRound) {
+    if (showYearDiv && pick.draftYear !== lastYear) {
+      tbody.appendChild(yearDividerRow(pick.draftYear));
+      lastYear = pick.draftYear;
+      lastRound = null;
+    }
+    if (showRoundDividers && pick.round !== lastRound) {
       tbody.appendChild(roundDividerRow(pick.round));
       lastRound = pick.round;
     }
@@ -210,6 +289,17 @@ function roundDividerRow(round) {
   return tr;
 }
 
+function yearDividerRow(year) {
+  const tr = document.createElement("tr");
+  tr.className = "year-divider";
+  tr.dataset.year = String(year);
+  const td = document.createElement("td");
+  td.colSpan = 12;
+  td.textContent = String(year);
+  tr.appendChild(td);
+  return tr;
+}
+
 function updateSortIndicator() {
   for (const th of document.querySelectorAll("#picks thead th[data-key]")) {
     th.classList.toggle("sort-asc", th.dataset.key === state.sortKey && state.sortDir === "asc");
@@ -222,10 +312,13 @@ function emptyRow() {
   const td = document.createElement("td");
   td.colSpan = 12;
   td.className = "empty";
-  td.textContent =
-    state.teamTricode === ALL_TEAMS
-      ? "No picks for this year."
-      : "No picks for this team in this year.";
+  if (state.year === ALL_YEARS && state.teamTricode === ALL_TEAMS) {
+    td.textContent = "Pick a team to see its draft history.";
+  } else if (state.teamTricode === ALL_TEAMS) {
+    td.textContent = "No picks for this year.";
+  } else {
+    td.textContent = "No picks for this team in this year.";
+  }
   tr.appendChild(td);
   return tr;
 }
